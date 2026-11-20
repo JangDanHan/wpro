@@ -28,10 +28,10 @@ export function StateFeedback({
         </div>
         <div>
           <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">
-            도시를 선택하면 지금 참고할 옷차림을 알려드려요.
+            지역을 선택하면 지금 참고할 옷차림을 알려드려요.
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            위 목록에서 서울, 광주, 부산 중 하나를 선택해 주세요.
+            시·도, 시·군·구, 읍·면·동을 선택하거나 지역명을 직접 검색해 주세요.
           </p>
         </div>
       </div>

@@ -1,34 +1,38 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CityId, OutfitRecommendation, ValidatedWeatherData } from "@/lib/domain/types"
+import { OutfitRecommendation, ValidatedWeatherData } from "@/lib/domain/types"
 import { THREE_HOURS_MS } from "@/lib/domain/validator"
 
 export type WeatherViewState =
-  | "idle" // 초기 상태: 도시 미선택 (EX-01)
-  | "loading" // 조회 중 (F-08, EX-13)
-  | "success" // 정상 표시 (3.2)
-  | "partial" // 일부 정보 누락 상태 (EX-08, EX-10)
-  | "error_network" // 연결 문제 (EX-02)
-  | "error_timeout" // 10초 지연 (EX-03)
-  | "error_rate_limit" // 제공처 제한/장애 (EX-04)
-  | "error_invalid_temp" // 기온 누락 (EX-05)
-  | "error_expired" // 3시간 초과 오래된 정보 (EX-07)
+  | "idle" // 초기 상태: 지역 미선택
+  | "loading" // 조회 중
+  | "success" // 정상 표시
+  | "partial" // 일부 정보 누락 상태
+  | "error_network" // 연결 문제
+  | "error_timeout" // 10초 지연
+  | "error_rate_limit" // 제공처 제한/장애
+  | "error_invalid_temp" // 기온 누락
+  | "error_expired" // 3시간 초과 오래된 정보
   | "error_generic" // 기타 오류
 
 export interface UseWeatherRecommendationReturn {
-  selectedCity: CityId | null
+  selectedCity: string | null
+  selectedRegionId: string | null
+  selectedRegionLabel: string | null
   state: WeatherViewState
   weather: ValidatedWeatherData | null
   recommendation: OutfitRecommendation | null
   errorMessage: string | null
-  selectCity: (city: CityId) => void
+  selectCity: (regionId: string, label?: string) => void
+  selectRegion: (regionId: string, label?: string) => void
   refresh: () => void
   isFetching: boolean
 }
 
 export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
-  const [selectedCity, setSelectedCity] = useState<CityId | null>(null)
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null)
+  const [selectedRegionLabel, setSelectedRegionLabel] = useState<string | null>(null)
   const [state, setState] = useState<WeatherViewState>("idle")
   const [weather, setWeather] = useState<ValidatedWeatherData | null>(null)
   const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null)
@@ -50,10 +54,8 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     }
   }, [])
 
-  const fetchWeatherForCity = useCallback(
-    async (city: CityId) => {
-      // EX-13: 동일 도시 조회 중 중복 요청 방지
-      // (단, 다른 도시로의 변경은 허용)
+  const fetchWeatherForRegion = useCallback(
+    async (regionId: string) => {
       if (activeAbortController.current) {
         activeAbortController.current.abort()
         activeAbortController.current = null
@@ -65,7 +67,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       activeRequestId.current += 1
       const currentRequestId = activeRequestId.current
 
-      // 도시 변경 즉시 이전 날씨와 추천 숨김 (F-01, F-08, EX-12)
+      // 지역 변경 즉시 이전 날씨와 추천 숨김
       setWeather(null)
       setRecommendation(null)
       setErrorMessage(null)
@@ -84,7 +86,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       }, 10000)
 
       try {
-        const response = await fetch(`/api/weather?city=${city}`, {
+        const response = await fetch(`/api/weather?regionId=${encodeURIComponent(regionId)}`, {
           signal: controller.signal,
           cache: "no-store",
         })
@@ -135,14 +137,13 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
         setWeather(fetchedWeather)
         setRecommendation(fetchedRecommendation)
 
-        // 부분 정보 누락 상태 구분 (EX-08 강수량 누락, EX-10 날씨 문구 누락)
         if (fetchedWeather.weatherDescription === null || fetchedWeather.rainfallAmount === null) {
           setState("partial")
         } else {
           setState("success")
         }
 
-        // EX-07, F-04: 화면 체류 중 3시간 만료 감지 타이머 설정
+        // 화면 체류 중 3시간 만료 감지 타이머
         const now = Date.now()
         const elapsedSinceRef = now - fetchedWeather.referenceAt
         const remainingUntilExpired = THREE_HOURS_MS - elapsedSinceRef
@@ -168,7 +169,6 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
         clearAllTimers()
 
         if (err.name === "AbortError") {
-          // 이미 timeout 타이머에서 error_timeout으로 처리하지 않은 경우만
           if (state !== "error_timeout") {
             setState("error_timeout")
             setErrorMessage("날씨 조회가 지연되고 있어요. 다시 시도해 주세요.")
@@ -183,24 +183,24 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     [clearAllTimers, state],
   )
 
-  const selectCity = useCallback(
-    (city: CityId) => {
-      // 조회 중 동일 도시 클릭 방지 (EX-13)
-      if (state === "loading" && selectedCity === city) {
+  const selectRegion = useCallback(
+    (regionId: string, label?: string) => {
+      if (state === "loading" && selectedRegionId === regionId) {
         return
       }
-      setSelectedCity(city)
-      fetchWeatherForCity(city)
+      setSelectedRegionId(regionId)
+      if (label) setSelectedRegionLabel(label)
+      fetchWeatherForRegion(regionId)
     },
-    [fetchWeatherForCity, selectedCity, state],
+    [fetchWeatherForRegion, selectedRegionId, state],
   )
 
   const refresh = useCallback(() => {
-    if (!selectedCity || state === "loading") {
+    if (!selectedRegionId || state === "loading") {
       return
     }
-    fetchWeatherForCity(selectedCity)
-  }, [fetchWeatherForCity, selectedCity, state])
+    fetchWeatherForRegion(selectedRegionId)
+  }, [fetchWeatherForRegion, selectedRegionId, state])
 
   useEffect(() => {
     return () => {
@@ -212,12 +212,15 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   }, [clearAllTimers])
 
   return {
-    selectedCity,
+    selectedCity: selectedRegionId,
+    selectedRegionId,
+    selectedRegionLabel,
     state,
     weather,
     recommendation,
     errorMessage,
-    selectCity,
+    selectCity: selectRegion,
+    selectRegion,
     refresh,
     isFetching: state === "loading",
   }

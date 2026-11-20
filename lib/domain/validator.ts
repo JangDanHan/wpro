@@ -11,12 +11,12 @@ export function validateWeatherData(
   raw: RawWeatherData,
   currentTimeMs: number = Date.now(),
 ): ValidationResult {
-  // 1. 도시 확인
-  if (!raw.cityId || !CITIES[raw.cityId]) {
+  // 1. 도시/지역 ID 확인
+  if (!raw.cityId || typeof raw.cityId !== "string" || raw.cityId.trim() === "") {
     return {
       isValid: false,
       errorType: "MISSING_REQUIRED_FIELD",
-      errorMessage: "지원하는 도시를 확인할 수 없습니다.",
+      errorMessage: "선택된 지역 정보를 확인할 수 없습니다.",
     }
   }
 
@@ -98,9 +98,12 @@ export function validateWeatherData(
     hour12: false,
   }).format(refDate)
 
+  const resolvedCityName =
+    raw.cityName?.trim() || (CITIES[raw.cityId] ? CITIES[raw.cityId].name : raw.cityId)
+
   const validated: ValidatedWeatherData = {
     cityId: raw.cityId,
-    cityName: CITIES[raw.cityId].name,
+    cityName: resolvedCityName,
     temperature: raw.temperature,
     weatherDescription: raw.weatherDescription?.trim() || null, // 누락 시 null (EX-10)
     precipitationType: raw.precipitationType || "unknown",

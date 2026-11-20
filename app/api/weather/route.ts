@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { CITIES, CityId, RawWeatherData } from "@/lib/domain/types"
+import { RawWeatherData } from "@/lib/domain/types"
 import { validateWeatherData } from "@/lib/domain/validator"
 import { detectPrecipitation } from "@/lib/domain/precipitation"
 import { createRecommendation } from "@/lib/domain/recommender"
+import { findKmaRegionById } from "@/lib/domain/regions"
 
 /**
  * 기상청 단기예보 조회서비스 기준 일시 계산 (KST 기준)
@@ -65,7 +66,6 @@ function parseKmaRainfall(rn1Raw?: string | null): number | null {
   if (trimmed === "강수없음" || trimmed === "0" || trimmed === "0.0") {
     return 0
   }
-  // "1.2mm" 또는 "1.2" 형태 처리
   const cleaned = trimmed.replace("mm", "").trim()
   const num = parseFloat(cleaned)
   return Number.isNaN(num) ? null : num
@@ -73,20 +73,32 @@ function parseKmaRainfall(rn1Raw?: string | null): number | null {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const cityParam = searchParams.get("city") as CityId | null
+  const regionParam = searchParams.get("regionId") || searchParams.get("city")
 
-  // F-01: 지원 도시는 서울, 광주, 부산
-  if (!cityParam || !CITIES[cityParam]) {
+  // 1. 요청된 지역 파라미터 유무 확인
+  if (!regionParam || regionParam.trim() === "") {
     return NextResponse.json(
       {
-        error: "지원하지 않는 도시입니다. 서울, 광주, 부산 중 하나를 선택해 주세요.",
-        errorType: "INVALID_CITY",
+        error: "조회할 지역을 선택해 주세요.",
+        errorType: "INVALID_REGION",
       },
       { status: 400 },
     )
   }
 
-  // 1. 기상청 API 인증키 확인 (.env.local)
+  // 2. 서버의 기상청 공식 행정구역 데이터로 지역 ID 및 격자 좌표 검증
+  const region = findKmaRegionById(regionParam.trim())
+  if (!region) {
+    return NextResponse.json(
+      {
+        error: "유효하지 않은 지역입니다. 올바른 대한민국 행정구역을 선택해 주세요.",
+        errorType: "INVALID_REGION",
+      },
+      { status: 400 },
+    )
+  }
+
+  // 3. 기상청 API 인증키 확인 (.env.local)
   const apiKey = process.env.KMA_API_KEY
   if (!apiKey || apiKey.trim() === "") {
     return NextResponse.json(
@@ -98,14 +110,14 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const city = CITIES[cityParam]
+  const { nx, ny } = region.grid
   const { baseDate, baseTime, referenceTimestamp } = getKmaBaseDateTime()
 
   // 공공데이터포털 serviceKey는 디코딩/인코딩 중복 방지를 위해 decode 후 1회 encode
   const decodedKey = decodeURIComponent(apiKey.trim())
   const encodedKey = encodeURIComponent(decodedKey)
 
-  const commonParams = `serviceKey=${encodedKey}&numOfRows=1000&pageNo=1&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${city.nx}&ny=${city.ny}`
+  const commonParams = `serviceKey=${encodedKey}&numOfRows=1000&pageNo=1&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`
 
   // 엔드포인트 URL
   const ncstUrl = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?${commonParams}`
@@ -116,7 +128,7 @@ export async function GET(request: NextRequest) {
   const timeoutId = setTimeout(() => controller.abort(), 10000)
 
   try {
-    // 2. 초단기실황(getUltraSrtNcst)과 초단기예보(getUltraSrtFcst, 하늘상태 보강용)를 병렬 호출
+    // 초단기실황(getUltraSrtNcst)과 초단기예보(getUltraSrtFcst, 하늘상태 보강용)를 병렬 호출
     const [ncstResponse, fcstResponse] = await Promise.all([
       fetch(ncstUrl, {
         signal: controller.signal,
@@ -127,7 +139,7 @@ export async function GET(request: NextRequest) {
         signal: controller.signal,
         headers: { Accept: "application/json" },
         cache: "no-store",
-      }).catch(() => null), // 초단기예보 실패 시에도 실황 데이터로 진행
+      }).catch(() => null),
     ])
 
     clearTimeout(timeoutId)
@@ -154,9 +166,11 @@ export async function GET(request: NextRequest) {
 
     const ncstText = await ncstResponse.text()
 
-    // XML 에러 응답 파싱 대응 (공공데이터포털은 에러 시 JSON 대신 XML 반환 가능)
+    // XML 에러 응답 파싱 대응
     if (ncstText.trim().startsWith("<")) {
-      const errMsgMatch = ncstText.match(/<errMsg>(.*?)<\/errMsg>/) || ncstText.match(/<returnAuthMsg>(.*?)<\/returnAuthMsg>/)
+      const errMsgMatch =
+        ncstText.match(/<errMsg>(.*?)<\/errMsg>/) ||
+        ncstText.match(/<returnAuthMsg>(.*?)<\/returnAuthMsg>/)
       const kmaErrMsg = errMsgMatch ? errMsgMatch[1] : "기상청 서비스 응답 오류"
 
       return NextResponse.json(
@@ -235,7 +249,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. 초단기예보에서 하늘상태(SKY) 추출
+    // 초단기예보에서 하늘상태(SKY) 추출
     let skyCode: number | null = null
     if (fcstResponse && fcstResponse.ok) {
       try {
@@ -244,7 +258,6 @@ export async function GET(request: NextRequest) {
           const fcstData = JSON.parse(fcstText)
           const fcstItems = fcstData?.response?.body?.items?.item
           if (Array.isArray(fcstItems)) {
-            // 가장 빠른 fcstTime의 SKY 값 찾기
             const skyItem = fcstItems.find((it: any) => it.category === "SKY")
             if (skyItem) {
               const parsed = parseInt(skyItem.fcstValue, 10)
@@ -254,9 +267,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      } catch {
-        // 초단기예보 파싱 실패 시에도 실황 데이터로 계속 진행
-      }
+      } catch {}
     }
 
     // 날씨 상태 설명 문구 및 강수 형태 결정
@@ -270,7 +281,8 @@ export async function GET(request: NextRequest) {
     })
 
     const rawData: RawWeatherData = {
-      cityId: city.id,
+      cityId: region.value,
+      cityName: region.label,
       temperature,
       weatherCode: ptyCode,
       weatherDescription,
@@ -294,6 +306,9 @@ export async function GET(request: NextRequest) {
         { status: 422 },
       )
     }
+
+    // 공식 전체 주소 라벨을 cityName으로 주입
+    validation.data.cityName = region.label
 
     // PRD F-05, F-06, F-07 추천 생성
     const recommendation = createRecommendation(validation.data)

@@ -1,4 +1,5 @@
-export type CityId = "seoul" | "gwangju" | "busan"
+export type CityId = string
+export type RegionId = string
 
 export interface CityInfo {
   id: CityId
@@ -50,6 +51,7 @@ export type InfoType = "관측 정보" | "모델 기반 현재 날씨"
 
 export interface RawWeatherData {
   cityId: CityId
+  cityName?: string | null
   temperature?: number | null
   weatherCode?: number | null
   weatherDescription?: string | null

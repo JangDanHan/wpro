@@ -25,8 +25,8 @@ describe("Weather Data Validator (PRD F-03, F-04, EX-05, EX-06, EX-07, EX-11)", 
     expect(result.data?.temperature).toBe(12.5)
   })
 
-  it("지원하지 않는 도시는 에러를 반환한다 (F-01)", () => {
-    const result = validateWeatherData({ ...baseValidData, cityId: "incheon" as any }, now)
+  it("지역 식별자가 누락되면 에러를 반환한다 (F-01)", () => {
+    const result = validateWeatherData({ ...baseValidData, cityId: "" }, now)
     expect(result.isValid).toBe(false)
     expect(result.errorType).toBe("MISSING_REQUIRED_FIELD")
   })

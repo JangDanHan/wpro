@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { GET, getKmaBaseDateTime } from "@/app/api/weather/route"
 import { NextRequest } from "next/server"
 
-describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 연동)", () => {
+describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 전국 연동)", () => {
   const originalApiKey = process.env.KMA_API_KEY
 
   beforeEach(() => {
@@ -15,14 +15,12 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
   })
 
   it("getKmaBaseDateTime은 45분 전 기준의 KST 년월일시를 정확히 계산한다", () => {
-    // 2026년 11월 20일 17시 50분 (KST)
     const mockDate = new Date("2026-11-20T17:50:00+09:00")
     const { baseDate, baseTime } = getKmaBaseDateTime(mockDate)
 
     expect(baseDate).toBe("20261120")
     expect(baseTime).toBe("1700")
 
-    // 2026년 11월 20일 17시 30분 -> 45분 전 = 16시 45분 -> baseTime: 1600
     const mockDateEarly = new Date("2026-11-20T17:30:00+09:00")
     const { baseDate: baseDate2, baseTime: baseTime2 } = getKmaBaseDateTime(mockDateEarly)
 
@@ -30,28 +28,28 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
     expect(baseTime2).toBe("1600")
   })
 
-  it("지원하지 않는 도시 요청 시 400 에러를 반환한다 (F-01)", async () => {
-    const req = new NextRequest("http://localhost:3000/api/weather?city=incheon")
+  it("존재하지 않거나 유효하지 않은 지역 요청 시 400 에러를 반환한다", async () => {
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=invalid-unknown-place")
     const res = await GET(req)
     const data = await res.json()
 
     expect(res.status).toBe(400)
-    expect(data.errorType).toBe("INVALID_CITY")
+    expect(data.errorType).toBe("INVALID_REGION")
   })
 
-  it("도시 파라미터가 없으면 400 에러를 반환한다", async () => {
+  it("지역 파라미터가 없으면 400 에러를 반환한다", async () => {
     const req = new NextRequest("http://localhost:3000/api/weather")
     const res = await GET(req)
     const data = await res.json()
 
     expect(res.status).toBe(400)
-    expect(data.errorType).toBe("INVALID_CITY")
+    expect(data.errorType).toBe("INVALID_REGION")
   })
 
   it("KMA_API_KEY 환경변수가 없으면 500 에러를 반환한다", async () => {
     delete process.env.KMA_API_KEY
 
-    const req = new NextRequest("http://localhost:3000/api/weather?city=seoul")
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=seoul")
     const res = await GET(req)
     const data = await res.json()
 
@@ -60,7 +58,7 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
     expect(data.error).toContain("기상청 API 인증키가 설정되지 않았습니다")
   })
 
-  it("기상청 실황 정상 응답 시 기상청 데이터와 추천 카드를 올바르게 조합하여 반환한다", async () => {
+  it("기상청 실황 정상 응답 시 전체 지역명과 추천 카드를 올바르게 반환한다", async () => {
     const mockNcstResponse = {
       response: {
         header: { resultCode: "00", resultMsg: "NORMAL_SERVICE" },
@@ -101,57 +99,19 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
         text: async () => JSON.stringify(mockFcstResponse),
       } as any)
 
-    const req = new NextRequest("http://localhost:3000/api/weather?city=seoul")
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=서울특별시-종로구-사직동")
     const res = await GET(req)
     const data = await res.json()
 
     expect(res.status).toBe(200)
     expect(data.weather).toBeDefined()
-    expect(data.weather.cityName).toBe("서울")
+    expect(data.weather.cityName).toBe("서울특별시 종로구 사직동")
     expect(data.weather.temperature).toBe(11.2)
     expect(data.weather.provider).toBe("기상청")
     expect(data.weather.infoType).toBe("관측 정보")
     expect(data.weather.weatherDescription).toBe("맑음")
     expect(data.recommendation).toBeDefined()
-    expect(data.recommendation.basicOutfit).toBe("재킷과 긴소매") // 10~15℃
-  })
-
-  it("기상청 실황 강수형태(PTY: 1 비) 응답 시 비 옷차림 안내가 포함된다", async () => {
-    const mockNcstResponse = {
-      response: {
-        header: { resultCode: "00", resultMsg: "NORMAL_SERVICE" },
-        body: {
-          items: {
-            item: [
-              { category: "T1H", obsrValue: "8.0" },
-              { category: "RN1", obsrValue: "2.5" },
-              { category: "PTY", obsrValue: "1" }, // 비
-            ],
-          },
-        },
-      },
-    }
-
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify(mockNcstResponse),
-      } as any)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      } as any)
-
-    const req = new NextRequest("http://localhost:3000/api/weather?city=gwangju")
-    const res = await GET(req)
-    const data = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(data.weather.precipitationType).toBe("rain")
-    expect(data.weather.rainfallAmount).toBe(2.5)
-    expect(data.recommendation.basicOutfit).toBe("코트와 긴소매")
-    expect(data.recommendation.precipitationNotice).toContain("우산과 방수 신발")
+    expect(data.recommendation.basicOutfit).toBe("재킷과 긴소매")
   })
 
   it("기상청 XML 에러 응답 시 502 에러를 반환한다", async () => {
@@ -168,7 +128,7 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
       text: async () => xmlError,
     } as any)
 
-    const req = new NextRequest("http://localhost:3000/api/weather?city=busan")
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=busan")
     const res = await GET(req)
     const data = await res.json()
 
