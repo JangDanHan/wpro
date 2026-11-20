@@ -6,8 +6,8 @@ interface SourceFooterProps {
 }
 
 export function SourceFooter({
-  provider = "Open-Meteo",
-  providerUrl = "https://open-meteo.com/",
+  provider = "기상청",
+  providerUrl = "https://www.weather.go.kr/",
 }: SourceFooterProps) {
   return (
     <footer className="w-full text-center py-6 border-t border-zinc-200 dark:border-zinc-800 space-y-2 text-xs text-zinc-500 dark:text-zinc-400">

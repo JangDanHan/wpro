@@ -6,6 +6,8 @@ export interface CityInfo {
   fullName: string
   latitude: number
   longitude: number
+  nx: number
+  ny: number
   timezone: string
 }
 
@@ -16,6 +18,8 @@ export const CITIES: Record<CityId, CityInfo> = {
     fullName: "서울특별시",
     latitude: 37.5665,
     longitude: 126.9780,
+    nx: 60,
+    ny: 127,
     timezone: "Asia/Seoul",
   },
   gwangju: {
@@ -24,6 +28,8 @@ export const CITIES: Record<CityId, CityInfo> = {
     fullName: "광주광역시",
     latitude: 35.1595,
     longitude: 126.8526,
+    nx: 58,
+    ny: 74,
     timezone: "Asia/Seoul",
   },
   busan: {
@@ -32,6 +38,8 @@ export const CITIES: Record<CityId, CityInfo> = {
     fullName: "부산광역시",
     latitude: 35.1796,
     longitude: 129.0756,
+    nx: 98,
+    ny: 76,
     timezone: "Asia/Seoul",
   },
 }

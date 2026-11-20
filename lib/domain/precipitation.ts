@@ -4,6 +4,29 @@ export interface PrecipitationDetectionInput {
   explicitType?: PrecipitationType | null
   weatherDescription?: string | null
   weatherCode?: number | null
+  kmaPtyCode?: number | null
+}
+
+/**
+ * 기상청 PTY(강수형태) 코드를 PrecipitationType으로 변환
+ * 0: 없음, 1: 비, 2: 비/눈, 3: 눈, 5: 빗방울, 6: 빗방울눈날림, 7: 눈날림
+ */
+export function mapKmaPtyToPrecipitationType(ptyCode: number): PrecipitationType | null {
+  switch (ptyCode) {
+    case 0:
+      return "none"
+    case 1:
+    case 5:
+      return "rain"
+    case 2:
+    case 6:
+      return "mixed"
+    case 3:
+    case 7:
+      return "snow"
+    default:
+      return null
+  }
 }
 
 /**
@@ -15,10 +38,16 @@ export interface PrecipitationDetectionInput {
  * 5. 같은 기준 시각의 정보끼리 비·눈 또는 강수 유무가 충돌하면 ‘강수 여부 확인 불가’를 적용한다.
  */
 export function detectPrecipitation(input: PrecipitationDetectionInput): PrecipitationType {
-  const { explicitType, weatherDescription, weatherCode } = input
+  const { explicitType, weatherDescription, weatherCode, kmaPtyCode } = input
 
-  // WMO 코드 매핑 보조 (Open-Meteo)
-  let codeDerivedType: PrecipitationType | null = null
+  // 기상청 PTY 코드 우선 반영
+  let kmaDerivedType: PrecipitationType | null = null
+  if (typeof kmaPtyCode === "number") {
+    kmaDerivedType = mapKmaPtyToPrecipitationType(kmaPtyCode)
+  }
+
+  // WMO 코드 매핑 보조 (Open-Meteo 호환용)
+  let codeDerivedType: PrecipitationType | null = kmaDerivedType
   if (typeof weatherCode === "number") {
     if (weatherCode === 0 || (weatherCode >= 1 && weatherCode <= 3) || weatherCode === 45 || weatherCode === 48) {
       codeDerivedType = "none"
