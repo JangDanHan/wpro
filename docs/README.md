@@ -7,7 +7,7 @@
 | 문서명 | 설명 | 상태 / 대상 스프린트 |
 |---|---|---|
 | [DEVELOPMENT_PLAN.md](file:///c:/Users/jangd/OneDrive/바탕%20화면/wpro/docs/DEVELOPMENT_PLAN.md) | **전체 개발 계획서 및 스프린트(0~5) 로드맵** | 작성 완료 (v1.0.0) |
-| `WEATHER_API_SPEC.md` | 날씨 제공처 확정 및 데이터 매핑 규격서 | Sprint 0 예정 |
+| [WEATHER_API_SPEC.md](file:///c:/Users/jangd/OneDrive/바탕%20화면/wpro/docs/WEATHER_API_SPEC.md) | **날씨 제공처 확정 및 데이터 매핑 규격서** | 작성 완료 (v1.0.0, Sprint 0) |
 | `TEST_SPECIFICATION.md` | 예외 케이스(EX-01 ~ EX-15) 및 6.1 체크리스트 명세 | Sprint 4 예정 |
 | `USER_TESTING_PROTOCOL.md` | 5인 사용자 검증(UT) 인터뷰 질문 및 측정 양식 | Sprint 5 예정 |
 | `UT_RESULT_REPORT.md` | 사용자 검증 결과 보고서 및 성공조건 평가 | Sprint 5 예정 |
