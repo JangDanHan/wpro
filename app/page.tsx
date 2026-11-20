@@ -1,5 +1,5 @@
-import { OutfitApp } from "@/components/outfit-app"
+import { WeatherOutfitApp } from "@/components/WeatherOutfitApp"
 
 export default function Page() {
-  return <OutfitApp />
+  return <WeatherOutfitApp />
 }

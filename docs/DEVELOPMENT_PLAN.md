@@ -213,9 +213,9 @@ flowchart TD
    - 색상 외에 아이콘 및 명확한 텍스트 문구로 상태 구분
 
 #### 완료 기준 (DoD)
-- [ ] 8가지 화면 상태가 Figma/PRD 명세대로 렌더링 확인
-- [ ] 모바일(360px viewport) 및 데스크톱 브라우저에서 반응형 레이아웃 검증
-- [ ] 마우스 없이 키보드만으로 전 흐름 탐색 가능 확인
+- [x] 8가지 화면 상태가 Figma/PRD 명세대로 렌더링 확인 (StateFeedback, WeatherCard, OutfitCard)
+- [x] 모바일(360px viewport) 및 데스크톱 브라우저에서 반응형 레이아웃 검증 (가로스크롤 배제 max-w-md 레이아웃)
+- [x] 마우스 없이 키보드만으로 전 흐름 탐색 가능 확인 (focus-visible, aria-label, aria-pressed 완비)
 
 ---
 
