@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 제미나이 음악 검색어 생성 및 YouTube Data API 검색 (단계별 소요 시간 정밀 측정)
-    const result = await getRecommendedMusicWithTiming(weather, situation || null)
+    // 제미나이 음악 검색어 생성 및 YouTube Data API 검색 (단계별 시간 배분 및 클라이언트 요청 취소 전파)
+    const result = await getRecommendedMusicWithTiming(weather, situation || null, request.signal)
 
     if (!result.music) {
       return NextResponse.json(

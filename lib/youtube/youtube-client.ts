@@ -21,6 +21,9 @@ interface CacheEntry {
 // 1시간 캐시 TTL
 const CACHE_TTL_MS = 60 * 60 * 1000
 
+// YouTube Data API 검색 타임아웃 (전체 시간 배분: 최대 3.5초)
+const YOUTUBE_SEARCH_TIMEOUT_MS = 3500
+
 // 인메모리 검색 결과 캐시 (쿼리 -> 결과)
 const searchCache = new Map<string, CacheEntry>()
 
@@ -89,9 +92,14 @@ export function decodeHtmlEntities(str: string): string {
 export async function searchYouTubeVideo(
   searchQuery: string,
   reason: string,
+  parentSignal?: AbortSignal,
 ): Promise<MusicRecommendation | null> {
   const cleanQuery = (searchQuery || "").trim()
   if (!cleanQuery) {
+    return null
+  }
+
+  if (parentSignal?.aborted) {
     return null
   }
 
@@ -128,7 +136,12 @@ export async function searchYouTubeVideo(
   // 3. 실제 YouTube Data API v3 호출
   const fetchPromise = (async () => {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 6000)
+    const timeoutId = setTimeout(() => controller.abort(), YOUTUBE_SEARCH_TIMEOUT_MS)
+
+    const onParentAbort = () => controller.abort()
+    if (parentSignal) {
+      parentSignal.addEventListener("abort", onParentAbort, { once: true })
+    }
 
     try {
       const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(cleanQuery)}&key=${apiKey}`
@@ -140,6 +153,7 @@ export async function searchYouTubeVideo(
       })
 
       clearTimeout(timeoutId)
+      if (parentSignal) parentSignal.removeEventListener("abort", onParentAbort)
 
       if (!response.ok) {
         // 403 quotaExceeded 또는 기타 오류 대응
@@ -222,8 +236,9 @@ export function clearYouTubeCache(): void {
 export async function getRecommendedMusic(
   weather: ValidatedWeatherData,
   situation?: string | null,
+  parentSignal?: AbortSignal,
 ): Promise<MusicRecommendation | null> {
-  const result = await getRecommendedMusicWithTiming(weather, situation)
+  const result = await getRecommendedMusicWithTiming(weather, situation, parentSignal)
   return result.music
 }
 
@@ -238,21 +253,31 @@ export interface MusicWithTimingResult {
 
 /**
  * 단계별(Gemini 쿼리 생성, YouTube API 검색) 소요 시간을 정밀 측정하여 반환하는 함수
+ * - 전체 시간 배분 적용 (Gemini 최대 2.5초 지연 시 즉시 Fallback 전환 -> YouTube 최대 3.5초)
+ * - 사용자 요청 취소(parentSignal) 시 서버 외부 통신 즉시 중단
  */
 export async function getRecommendedMusicWithTiming(
   weather: ValidatedWeatherData,
   situation?: string | null,
+  parentSignal?: AbortSignal,
 ): Promise<MusicWithTimingResult> {
   const totalStart = performance.now()
   let geminiElapsedMs = 0
   let youtubeElapsedMs = 0
 
+  if (parentSignal?.aborted) {
+    return {
+      music: null,
+      timing: { geminiElapsedMs: 0, youtubeElapsedMs: 0, totalElapsedMs: 0 },
+    }
+  }
+
   try {
     const geminiStart = performance.now()
-    const { searchQuery, reason } = await generateAiMusicQuery(weather, situation)
+    const { searchQuery, reason } = await generateAiMusicQuery(weather, situation, parentSignal)
     geminiElapsedMs = Math.round(performance.now() - geminiStart)
 
-    if (!searchQuery) {
+    if (parentSignal?.aborted || !searchQuery) {
       return {
         music: null,
         timing: {
@@ -264,7 +289,7 @@ export async function getRecommendedMusicWithTiming(
     }
 
     const youtubeStart = performance.now()
-    const musicResult = await searchYouTubeVideo(searchQuery, reason)
+    const musicResult = await searchYouTubeVideo(searchQuery, reason, parentSignal)
     youtubeElapsedMs = Math.round(performance.now() - youtubeStart)
 
     return {

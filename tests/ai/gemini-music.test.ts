@@ -126,5 +126,19 @@ describe("Gemini Music Query Recommender", () => {
       expect(result.searchQuery).toBeTruthy()
       expect(result.reason).toBeTruthy()
     })
+
+    it("parentSignal이 이미 abort된 경우 외부 fetch를 호출하지 않고 즉시 fallback을 반환한다", async () => {
+      process.env.GEMINI_API_KEY = "test-api-key"
+      const fetchMock = vi.fn()
+      vi.stubGlobal("fetch", fetchMock)
+
+      const controller = new AbortController()
+      controller.abort() // 이미 취소됨
+
+      const result = await generateAiMusicQuery(baseWeather, "산책", controller.signal)
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result).toBeDefined()
+      expect(result.searchQuery).toBeTruthy()
+    })
   })
 })

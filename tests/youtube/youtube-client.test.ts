@@ -198,5 +198,18 @@ describe("YouTube Client", () => {
       const result = await searchYouTubeVideo("네트워크 에러 쿼리", "이유")
       expect(result).toBeNull()
     })
+
+    it("parentSignal이 이미 abort된 경우 외부 fetch를 호출하지 않고 즉시 null을 반환한다", async () => {
+      process.env.YOUTUBE_API_KEY = "test-api-key"
+      const fetchMock = vi.fn()
+      vi.stubGlobal("fetch", fetchMock)
+
+      const controller = new AbortController()
+      controller.abort()
+
+      const result = await searchYouTubeVideo("취소된 쿼리", "이유", controller.signal)
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result).toBeNull()
+    })
   })
 })

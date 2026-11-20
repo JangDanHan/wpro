@@ -32,10 +32,16 @@ function getGeminiApiKey(): string | null {
 }
 
 const PRIMARY_MODELS = [
+  "gemini-3.1-flash-lite", // 초고속 경량 모델 (1.5초 내 응답)
   "gemini-3.5-flash",
-  "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
 ]
+
+// 음악 검색어 생성용 Gemini 타임아웃 (전체 시간 배분: 최대 2.5초, 초과 시 즉시 Fallback 전환)
+const GEMINI_MUSIC_TIMEOUT_MS = 2500
+
+// AI 옷차림 추천용 Gemini 타임아웃
+const GEMINI_OUTFIT_TIMEOUT_MS = 5000
 
 /**
  * 기상청 공식 관측 날씨와 사용자 상황을 제미나이에 전달하여
@@ -47,9 +53,14 @@ const PRIMARY_MODELS = [
 export async function generateAiOutfitRecommendation(
   weather: ValidatedWeatherData,
   situation?: string | null,
+  parentSignal?: AbortSignal,
 ): Promise<OutfitRecommendation | null> {
   const cleanSituation = (situation || "").trim()
   if (!cleanSituation) {
+    return null
+  }
+
+  if (parentSignal?.aborted) {
     return null
   }
 
@@ -89,8 +100,15 @@ JSON 스키마:
 `.trim()
 
   for (const model of PRIMARY_MODELS) {
+    if (parentSignal?.aborted) return null
+
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_OUTFIT_TIMEOUT_MS)
+
+    const onParentAbort = () => controller.abort()
+    if (parentSignal) {
+      parentSignal.addEventListener("abort", onParentAbort, { once: true })
+    }
 
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -206,10 +224,15 @@ export function getFallbackMusicQuery(
 export async function generateAiMusicQuery(
   weather: ValidatedWeatherData,
   situation?: string | null,
+  parentSignal?: AbortSignal,
 ): Promise<MusicQueryResponse> {
   const cleanSituation = (situation || "").trim()
-  const apiKey = getGeminiApiKey()
 
+  if (parentSignal?.aborted) {
+    return getFallbackMusicQuery(weather, situation)
+  }
+
+  const apiKey = getGeminiApiKey()
   if (!apiKey) {
     return getFallbackMusicQuery(weather, situation)
   }
@@ -243,50 +266,58 @@ JSON 스키마:
 }
 `.trim()
 
-  for (const model of PRIMARY_MODELS) {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
+  // 가장 빠르고 안정적인 모델(gemini-3.1-flash-lite)로 최대 2.5초만 시도
+  // 지연되거나 실패하면 즉시 규칙 기반 Fallback 검색어로 전환하여 전체 제한 시간 보장
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_MUSIC_TIMEOUT_MS)
 
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 300,
-          },
-        }),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) continue
-
-      const data = await response.json()
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
-      if (!rawText) continue
-
-      const cleanedJsonText = rawText
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim()
-
-      const parsed = JSON.parse(cleanedJsonText)
-
-      if (parsed.searchQuery && parsed.reason) {
-        return {
-          searchQuery: parsed.searchQuery.trim(),
-          reason: parsed.reason.trim(),
-        }
-      }
-    } catch {
-      clearTimeout(timeoutId)
-    }
+  const onParentAbort = () => controller.abort()
+  if (parentSignal) {
+    parentSignal.addEventListener("abort", onParentAbort, { once: true })
   }
 
+  try {
+    const fastModel = PRIMARY_MODELS[0] // gemini-3.1-flash-lite
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${fastModel}:generateContent?key=${apiKey}`
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 300,
+        },
+      }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+    if (parentSignal) parentSignal.removeEventListener("abort", onParentAbort)
+
+    if (response.ok) {
+      const data = await response.json()
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (rawText) {
+        const cleanedJsonText = rawText
+          .replace(/```json/gi, "")
+          .replace(/```/g, "")
+          .trim()
+
+        const parsed = JSON.parse(cleanedJsonText)
+        if (parsed.searchQuery && parsed.reason) {
+          return {
+            searchQuery: parsed.searchQuery.trim(),
+            reason: parsed.reason.trim(),
+          }
+        }
+      }
+    }
+  } catch {
+    clearTimeout(timeoutId)
+    if (parentSignal) parentSignal.removeEventListener("abort", onParentAbort)
+  }
+
+  // Gemini가 지연되거나 실패하면 즉시 날씨 기반 기본 검색어로 전환 (0ms 대기)
   return getFallbackMusicQuery(weather, situation)
 }

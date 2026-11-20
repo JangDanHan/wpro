@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 제미나이 AI 맞춤 옷차림 생성
-    const recommendation = await generateAiOutfitRecommendation(weather, situation.trim())
+    // 제미나이 AI 맞춤 옷차림 생성 (클라이언트 요청 취소 전파)
+    const recommendation = await generateAiOutfitRecommendation(weather, situation.trim(), request.signal)
     const geminiElapsedMs = Math.round(performance.now() - startTime)
 
     if (!recommendation) {
