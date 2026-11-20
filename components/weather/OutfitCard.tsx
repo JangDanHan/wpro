@@ -1,16 +1,22 @@
 import { OutfitRecommendation } from "@/lib/domain/types"
-import { Shirt, Umbrella, AlertCircle, RefreshCw } from "lucide-react"
+import { Shirt, Umbrella, AlertCircle, RefreshCw, Sparkles, User, Loader2 } from "lucide-react"
 
 interface OutfitCardProps {
   recommendation: OutfitRecommendation
   onRefresh: () => void
   isFetching: boolean
+  aiState?: "idle" | "loading" | "success" | "error"
+  aiErrorMessage?: string | null
+  onRetryAi?: () => void
 }
 
 export function OutfitCard({
   recommendation,
   onRefresh,
   isFetching,
+  aiState = "idle",
+  aiErrorMessage,
+  onRetryAi,
 }: OutfitCardProps) {
   return (
     <article
@@ -23,9 +29,25 @@ export function OutfitCard({
           <div className="p-2 bg-sky-500 text-white rounded-xl shadow-xs">
             <Shirt className="w-5 h-5" aria-hidden="true" />
           </div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-            {recommendation.title}
-          </h2>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+                {recommendation.title}
+              </h2>
+              {recommendation.isAiGenerated && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  <Sparkles className="w-3 h-3 text-amber-500" aria-hidden="true" />
+                  AI 맞춤
+                </span>
+              )}
+              {aiState === "loading" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200/60">
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-500" aria-hidden="true" />
+                  AI 맞춤 분석 중...
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -38,6 +60,45 @@ export function OutfitCard({
           <span>날씨 다시 확인</span>
         </button>
       </div>
+
+      {/* 사용자 지정 상황 반영 안내 (상황이 전달되었을 때 표시) */}
+      {recommendation.situation && (
+        <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-zinc-800/60 border border-amber-200/50 dark:border-amber-900/30 rounded-xl text-xs text-zinc-700 dark:text-zinc-300">
+          <User className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1">
+            <span className="font-semibold text-amber-700 dark:text-amber-400">반영된 상황: </span>
+            <span>{recommendation.situation}</span>
+          </div>
+          {aiState === "error" && onRetryAi && (
+            <button
+              type="button"
+              onClick={onRetryAi}
+              className="px-2 py-1 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 rounded text-[11px] font-semibold transition-colors"
+            >
+              AI 추천 재시도
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* AI 추천 실패 피드백 (기본 추천 유지 안내) */}
+      {aiState === "error" && !recommendation.situation && (
+        <div className="flex items-center justify-between p-2.5 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/60 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+          <span className="flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+            AI 맞춤 추천이 지연되어 기본 규칙 추천을 표시하고 있습니다.
+          </span>
+          {onRetryAi && (
+            <button
+              type="button"
+              onClick={onRetryAi}
+              className="text-[11px] font-semibold underline underline-offset-2 hover:opacity-80 ml-2 shrink-0"
+            >
+              재시도
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 기본 옷차림 */}
       <div className="bg-white/80 dark:bg-zinc-800/80 backdrop-blur-xs p-4 rounded-xl border border-sky-100/60 dark:border-zinc-700/40">

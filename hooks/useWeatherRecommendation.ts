@@ -1,12 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { OutfitRecommendation, ValidatedWeatherData } from "@/lib/domain/types"
+import { MusicRecommendation, OutfitRecommendation, ValidatedWeatherData } from "@/lib/domain/types"
 import { THREE_HOURS_MS } from "@/lib/domain/validator"
 
 export type WeatherViewState =
   | "idle" // 초기 상태: 지역 미선택
-  | "loading" // 조회 중
+  | "loading" // 날씨 조회 중
   | "success" // 정상 표시
   | "partial" // 일부 정보 누락 상태
   | "error_network" // 연결 문제
@@ -16,32 +16,96 @@ export type WeatherViewState =
   | "error_expired" // 3시간 초과 오래된 정보
   | "error_generic" // 기타 오류
 
+export type SubFeatureState = "idle" | "loading" | "success" | "error"
+
+export interface StepTimings {
+  weatherMs: number | null
+  aiOutfitMs: number | null
+  musicTotalMs: number | null
+  geminiMusicMs: number | null
+  youtubeMs: number | null
+}
+
 export interface UseWeatherRecommendationReturn {
   selectedCity: string | null
   selectedRegionId: string | null
   selectedRegionLabel: string | null
+  situation: string
+  setSituation: (situation: string) => void
+
+  // 1. 기상청 날씨 및 기본 옷차림 상태 (즉시 응답)
   state: WeatherViewState
   weather: ValidatedWeatherData | null
   recommendation: OutfitRecommendation | null
   errorMessage: string | null
-  selectCity: (regionId: string, label?: string) => void
-  selectRegion: (regionId: string, label?: string) => void
-  refresh: () => void
   isFetching: boolean
+
+  // 2. AI 맞춤 추천 상태 (비동기 독립 분리)
+  aiState: SubFeatureState
+  aiErrorMessage: string | null
+  retryAiOutfit: () => void
+
+  // 3. 음악 추천 상태 (비동기 독립 분리)
+  musicState: SubFeatureState
+  music: MusicRecommendation | null
+  musicErrorMessage: string | null
+  retryMusic: () => void
+
+  // 4. 소요 시간 측정 지표
+  timings: StepTimings
+
+  // 공통 핸들러
+  selectCity: (regionId: string, label?: string, customSituation?: string) => void
+  selectRegion: (regionId: string, label?: string, customSituation?: string) => void
+  applySituation: (newSituation: string) => void
+  resetSelection: () => void
+  refresh: (customSituation?: string) => void
 }
 
 export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null)
   const [selectedRegionLabel, setSelectedRegionLabel] = useState<string | null>(null)
+  const [situation, setSituation] = useState<string>("")
+
+  // 1. 날씨 및 기본 옷차림 상태
   const [state, setState] = useState<WeatherViewState>("idle")
   const [weather, setWeather] = useState<ValidatedWeatherData | null>(null)
-  const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null)
+  const [basicRecommendation, setBasicRecommendation] = useState<OutfitRecommendation | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const activeAbortController = useRef<AbortController | null>(null)
-  const activeRequestId = useRef<number>(0)
+  // 2. AI 맞춤 옷차림 추천 상태 (별도 요청)
+  const [aiState, setAiState] = useState<SubFeatureState>("idle")
+  const [aiRecommendation, setAiRecommendation] = useState<OutfitRecommendation | null>(null)
+  const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(null)
+
+  // 3. 음악 추천 상태 (별도 요청)
+  const [musicState, setMusicState] = useState<SubFeatureState>("idle")
+  const [music, setMusic] = useState<MusicRecommendation | null>(null)
+  const [musicErrorMessage, setMusicErrorMessage] = useState<string | null>(null)
+
+  // 4. 단계별 소요 시간 측정
+  const [timings, setTimings] = useState<StepTimings>({
+    weatherMs: null,
+    aiOutfitMs: null,
+    musicTotalMs: null,
+    geminiMusicMs: null,
+    youtubeMs: null,
+  })
+
+  // 독립 AbortController들 (지역 변경 시 이전 요청 취소 및 응답 혼선 방지)
+  const weatherAbortRef = useRef<AbortController | null>(null)
+  const aiAbortRef = useRef<AbortController | null>(null)
+  const musicAbortRef = useRef<AbortController | null>(null)
+
+  // 요청 ID 및 활성 지역 ID 추적 (경쟁 상태 및 섞임 방지)
+  const activeRequestIdRef = useRef<number>(0)
+  const activeRegionIdRef = useRef<string | null>(null)
+
+  // 타이머 관리
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const aiTimeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const musicTimeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearAllTimers = useCallback(() => {
     if (timeoutTimerRef.current) {
@@ -52,38 +116,303 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       clearTimeout(expiryTimerRef.current)
       expiryTimerRef.current = null
     }
+    if (aiTimeoutTimerRef.current) {
+      clearTimeout(aiTimeoutTimerRef.current)
+      aiTimeoutTimerRef.current = null
+    }
+    if (musicTimeoutTimerRef.current) {
+      clearTimeout(musicTimeoutTimerRef.current)
+      musicTimeoutTimerRef.current = null
+    }
   }, [])
 
-  const fetchWeatherForRegion = useCallback(
-    async (regionId: string) => {
-      if (activeAbortController.current) {
-        activeAbortController.current.abort()
-        activeAbortController.current = null
+  // 모든 진행 중인 비동기 요청 일괄 취소
+  const abortAllRequests = useCallback(() => {
+    if (weatherAbortRef.current) {
+      weatherAbortRef.current.abort()
+      weatherAbortRef.current = null
+    }
+    if (aiAbortRef.current) {
+      aiAbortRef.current.abort()
+      aiAbortRef.current = null
+    }
+    if (musicAbortRef.current) {
+      musicAbortRef.current.abort()
+      musicAbortRef.current = null
+    }
+  }, [])
+
+  // 지역 미선택 또는 상위 지역 변경 시 전체 초기화
+  const resetSelection = useCallback(() => {
+    abortAllRequests()
+    clearAllTimers()
+    activeRequestIdRef.current += 1
+    activeRegionIdRef.current = null
+
+    setSelectedRegionId(null)
+    setSelectedRegionLabel(null)
+    setWeather(null)
+    setBasicRecommendation(null)
+    setAiRecommendation(null)
+    setMusic(null)
+    setErrorMessage(null)
+    setAiErrorMessage(null)
+    setMusicErrorMessage(null)
+    setState("idle")
+    setAiState("idle")
+    setMusicState("idle")
+    setTimings({
+      weatherMs: null,
+      aiOutfitMs: null,
+      musicTotalMs: null,
+      geminiMusicMs: null,
+      youtubeMs: null,
+    })
+  }, [abortAllRequests, clearAllTimers])
+
+  /**
+   * 독립 요청: AI 맞춤 옷차림 추천 호출
+   */
+  const fetchAiOutfit = useCallback(
+    async (
+      targetWeather: ValidatedWeatherData,
+      targetSituation: string,
+      targetRequestId: number,
+      targetRegionId: string,
+    ) => {
+      if (aiAbortRef.current) {
+        aiAbortRef.current.abort()
+        aiAbortRef.current = null
+      }
+      if (aiTimeoutTimerRef.current) {
+        clearTimeout(aiTimeoutTimerRef.current)
+        aiTimeoutTimerRef.current = null
       }
 
-      clearAllTimers()
+      const cleanSit = (targetSituation || "").trim()
+      if (!cleanSit) {
+        setAiRecommendation(null)
+        setAiState("idle")
+        setAiErrorMessage(null)
+        return
+      }
 
-      // EX-12: 최신 요청 ID 발급하여 이전 요청 응답 폐기
-      activeRequestId.current += 1
-      const currentRequestId = activeRequestId.current
-
-      // 지역 변경 즉시 이전 날씨와 추천 숨김
-      setWeather(null)
-      setRecommendation(null)
-      setErrorMessage(null)
-      setState("loading")
+      setAiState("loading")
+      setAiErrorMessage(null)
 
       const controller = new AbortController()
-      activeAbortController.current = controller
+      aiAbortRef.current = controller
 
-      // EX-03: 10초 클라이언트 타임아웃
+      // 8초 독립 타임아웃
+      aiTimeoutTimerRef.current = setTimeout(() => {
+        controller.abort()
+      }, 8000)
+
+      const startMs = performance.now()
+
+      try {
+        const response = await fetch("/api/recommendation/ai-outfit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            weather: targetWeather,
+            situation: cleanSit,
+          }),
+          signal: controller.signal,
+        })
+
+        if (aiTimeoutTimerRef.current) {
+          clearTimeout(aiTimeoutTimerRef.current)
+          aiTimeoutTimerRef.current = null
+        }
+
+        // 이전 요청이거나 다른 지역으로 변경된 경우 무시 (응답 섞임 방지)
+        if (
+          activeRequestIdRef.current !== targetRequestId ||
+          activeRegionIdRef.current !== targetRegionId
+        ) {
+          return
+        }
+
+        const elapsedMs = Math.round(performance.now() - startMs)
+        setTimings((prev) => ({ ...prev, aiOutfitMs: elapsedMs }))
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          setAiState("error")
+          setAiErrorMessage(errData.error || "AI 추천을 불러오지 못했어요. 기본 추천을 유지합니다.")
+          return
+        }
+
+        const data = await response.json()
+        if (data.recommendation) {
+          setAiRecommendation(data.recommendation)
+          setAiState("success")
+          console.log(`[Performance Trace] 👗 AI 맞춤 옷차림 응답 완료: ${elapsedMs}ms`)
+        } else {
+          setAiState("error")
+          setAiErrorMessage("AI 추천 결과가 없습니다.")
+        }
+      } catch (err: any) {
+        if (
+          activeRequestIdRef.current !== targetRequestId ||
+          activeRegionIdRef.current !== targetRegionId
+        ) {
+          return
+        }
+        if (err.name === "AbortError") {
+          setAiState("error")
+          setAiErrorMessage("AI 추천 응답이 지연되어 기본 추천을 표시합니다.")
+        } else {
+          setAiState("error")
+          setAiErrorMessage("AI 추천 통신 오류가 발생했습니다.")
+        }
+      }
+    },
+    [],
+  )
+
+  /**
+   * 독립 요청: 음악 추천 호출
+   */
+  const fetchMusic = useCallback(
+    async (
+      targetWeather: ValidatedWeatherData,
+      targetSituation: string | undefined,
+      targetRequestId: number,
+      targetRegionId: string,
+    ) => {
+      if (musicAbortRef.current) {
+        musicAbortRef.current.abort()
+        musicAbortRef.current = null
+      }
+      if (musicTimeoutTimerRef.current) {
+        clearTimeout(musicTimeoutTimerRef.current)
+        musicTimeoutTimerRef.current = null
+      }
+
+      setMusicState("loading")
+      setMusicErrorMessage(null)
+
+      const controller = new AbortController()
+      musicAbortRef.current = controller
+
+      // 8초 독립 타임아웃
+      musicTimeoutTimerRef.current = setTimeout(() => {
+        controller.abort()
+      }, 8000)
+
+      const startMs = performance.now()
+
+      try {
+        const response = await fetch("/api/recommendation/music", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            weather: targetWeather,
+            situation: targetSituation?.trim() || undefined,
+          }),
+          signal: controller.signal,
+        })
+
+        if (musicTimeoutTimerRef.current) {
+          clearTimeout(musicTimeoutTimerRef.current)
+          musicTimeoutTimerRef.current = null
+        }
+
+        // 이전 요청이거나 다른 지역으로 변경된 경우 무시 (응답 섞임 방지)
+        if (
+          activeRequestIdRef.current !== targetRequestId ||
+          activeRegionIdRef.current !== targetRegionId
+        ) {
+          return
+        }
+
+        const elapsedMs = Math.round(performance.now() - startMs)
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          setMusicState("error")
+          setMusicErrorMessage(errData.error || "음악 추천을 불러오지 못했습니다.")
+          return
+        }
+
+        const data = await response.json()
+        if (data.music) {
+          setMusic(data.music)
+          setMusicState("success")
+          const timing = data.timing || {}
+          setTimings((prev) => ({
+            ...prev,
+            musicTotalMs: elapsedMs,
+            geminiMusicMs: timing.geminiElapsedMs || null,
+            youtubeMs: timing.youtubeElapsedMs || null,
+          }))
+          console.log(
+            `[Performance Trace] 🎵 음악 추천 완료: 전체 ${elapsedMs}ms (Gemini: ${timing.geminiElapsedMs || 0}ms, YouTube: ${timing.youtubeElapsedMs || 0}ms)`,
+          )
+        } else {
+          setMusicState("error")
+          setMusicErrorMessage("추천 음악이 없습니다.")
+        }
+      } catch (err: any) {
+        if (
+          activeRequestIdRef.current !== targetRequestId ||
+          activeRegionIdRef.current !== targetRegionId
+        ) {
+          return
+        }
+        if (err.name === "AbortError") {
+          setMusicState("error")
+          setMusicErrorMessage("음악 조회가 지연되었습니다.")
+        } else {
+          setMusicState("error")
+          setMusicErrorMessage("음악 추천 연결 중 오류가 발생했습니다.")
+        }
+      }
+    },
+    [],
+  )
+
+  /**
+   * 1단계 기상청 날씨 조회 (기상청 날씨와 기본 규칙 옷차림을 먼저 즉시 표시)
+   */
+  const fetchWeatherForRegion = useCallback(
+    async (regionId: string, targetSituation?: string) => {
+      // 1. 이전 지역에 대한 모든 진행 중인 요청 취소
+      abortAllRequests()
+      clearAllTimers()
+
+      // 2. 새 요청 ID 및 지역 ID 등록
+      activeRequestIdRef.current += 1
+      const currentRequestId = activeRequestIdRef.current
+      activeRegionIdRef.current = regionId
+
+      // 3. 지역 변경 즉시 이전 날씨와 추천 숨김
+      setWeather(null)
+      setBasicRecommendation(null)
+      setAiRecommendation(null)
+      setMusic(null)
+      setErrorMessage(null)
+      setAiErrorMessage(null)
+      setMusicErrorMessage(null)
+      setState("loading")
+      setAiState("idle")
+      setMusicState("idle")
+
+      const controller = new AbortController()
+      weatherAbortRef.current = controller
+
+      // 10초 기상청 타임아웃
       timeoutTimerRef.current = setTimeout(() => {
-        if (activeRequestId.current === currentRequestId) {
+        if (activeRequestIdRef.current === currentRequestId) {
           controller.abort()
           setState("error_timeout")
           setErrorMessage("날씨 조회가 지연되고 있어요. 다시 시도해 주세요.")
         }
       }, 10000)
+
+      const weatherStartMs = performance.now()
 
       try {
         const response = await fetch(`/api/weather?regionId=${encodeURIComponent(regionId)}`, {
@@ -92,13 +421,18 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
         })
 
         // 요청 순서 역전 방지 (EX-12)
-        if (activeRequestId.current !== currentRequestId) {
+        if (
+          activeRequestIdRef.current !== currentRequestId ||
+          activeRegionIdRef.current !== regionId
+        ) {
           return
         }
 
         clearAllTimers()
 
         const payload = await response.json()
+        const weatherElapsedMs = Math.round(performance.now() - weatherStartMs)
+        setTimings((prev) => ({ ...prev, weatherMs: weatherElapsedMs }))
 
         if (!response.ok) {
           if (response.status === 429) {
@@ -106,20 +440,25 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
             setErrorMessage(payload.error || "날씨 정보를 잠시 이용할 수 없어요. 잠시 후 다시 시도해 주세요.")
             return
           }
-
+          if (payload.errorType === "INCOMPLETE_REGION_SELECTION") {
+            setState("error_generic")
+            setErrorMessage(payload.error || "시·도, 시·군·구, 읍·면·동을 모두 선택해야 합니다.")
+            return
+          }
           if (payload.errorType === "TIMEOUT") {
             setState("error_timeout")
             setErrorMessage(payload.error || "날씨 조회가 지연되고 있어요. 다시 시도해 주세요.")
             return
           }
-
           if (payload.errorType === "INVALID_TEMPERATURE") {
             setState("error_invalid_temp")
             setErrorMessage(payload.error || "기온을 확인할 수 없어 옷차림을 추천하지 못했어요.")
             return
           }
-
-          if (payload.errorType === "EXPIRED_REFERENCE_TIME" || payload.errorType === "FUTURE_REFERENCE_TIME") {
+          if (
+            payload.errorType === "EXPIRED_REFERENCE_TIME" ||
+            payload.errorType === "FUTURE_REFERENCE_TIME"
+          ) {
             setState("error_expired")
             setErrorMessage(payload.error || "현재 기준으로 사용할 수 있는 날씨 정보가 아니에요. 다시 확인해 주세요.")
             return
@@ -130,12 +469,12 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
           return
         }
 
-        // 성공 응답 처리
+        // 성공 응답: 기상청 날씨와 기본 규칙 기반 옷차림을 먼저 즉시 화면에 렌더링!
         const fetchedWeather = payload.weather as ValidatedWeatherData
         const fetchedRecommendation = payload.recommendation as OutfitRecommendation
 
         setWeather(fetchedWeather)
-        setRecommendation(fetchedRecommendation)
+        setBasicRecommendation(fetchedRecommendation)
 
         if (fetchedWeather.weatherDescription === null || fetchedWeather.rainfallAmount === null) {
           setState("partial")
@@ -143,85 +482,160 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
           setState("success")
         }
 
-        // 화면 체류 중 3시간 만료 감지 타이머
-        const now = Date.now()
-        const elapsedSinceRef = now - fetchedWeather.referenceAt
-        const remainingUntilExpired = THREE_HOURS_MS - elapsedSinceRef
+        console.log(`[Performance Trace] 🌤️ 기상청 날씨 로드 완료: ${weatherElapsedMs}ms`)
 
-        if (remainingUntilExpired > 0) {
+        // 3시간 화면 체류 만료 타이머 등록
+        const ageMs = Math.max(0, Date.now() - fetchedWeather.referenceAt)
+        const remainingValidMs = Math.max(0, THREE_HOURS_MS - ageMs)
+
+        if (remainingValidMs > 0) {
           expiryTimerRef.current = setTimeout(() => {
-            if (activeRequestId.current === currentRequestId) {
-              setWeather(null)
-              setRecommendation(null)
+            if (activeRequestIdRef.current === currentRequestId) {
               setState("error_expired")
-              setErrorMessage("현재 기준으로 사용할 수 있는 날씨 정보가 아니에요. 다시 확인해 주세요.")
+              setErrorMessage("날씨 정보가 만료되었어요. 최신 날씨를 다시 확인해 주세요.")
             }
-          }, remainingUntilExpired)
-        } else {
-          setState("error_expired")
-          setErrorMessage("현재 기준으로 사용할 수 있는 날씨 정보가 아니에요. 다시 확인해 주세요.")
+          }, remainingValidMs)
         }
+
+        // 2단계: AI 맞춤 추천과 음악 추천을 백그라운드에서 별도 비동기 요청으로 호출!
+        const currentSit = targetSituation !== undefined ? targetSituation : situation
+
+        if (currentSit && currentSit.trim().length > 0) {
+          fetchAiOutfit(fetchedWeather, currentSit, currentRequestId, regionId)
+        }
+
+        fetchMusic(fetchedWeather, currentSit, currentRequestId, regionId)
       } catch (err: any) {
-        if (activeRequestId.current !== currentRequestId) {
+        if (
+          activeRequestIdRef.current !== currentRequestId ||
+          activeRegionIdRef.current !== regionId
+        ) {
           return
         }
-
-        clearAllTimers()
-
         if (err.name === "AbortError") {
-          if (state !== "error_timeout") {
-            setState("error_timeout")
-            setErrorMessage("날씨 조회가 지연되고 있어요. 다시 시도해 주세요.")
-          }
-          return
+          setState("error_timeout")
+          setErrorMessage("날씨 조회가 지연되고 있어요. 다시 시도해 주세요.")
+        } else {
+          setState("error_network")
+          setErrorMessage("날씨를 불러오지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.")
         }
-
-        setState("error_network")
-        setErrorMessage("날씨를 불러오지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.")
       }
     },
-    [clearAllTimers, state],
+    [abortAllRequests, clearAllTimers, fetchAiOutfit, fetchMusic, situation],
   )
 
+  /**
+   * 지역 선택
+   */
   const selectRegion = useCallback(
-    (regionId: string, label?: string) => {
-      if (state === "loading" && selectedRegionId === regionId) {
+    (regionId: string, label?: string, customSituation?: string) => {
+      if (!regionId || regionId.trim() === "") {
+        resetSelection()
         return
       }
       setSelectedRegionId(regionId)
       if (label) setSelectedRegionLabel(label)
-      fetchWeatherForRegion(regionId)
+      if (customSituation !== undefined) setSituation(customSituation)
+      fetchWeatherForRegion(regionId, customSituation)
     },
-    [fetchWeatherForRegion, selectedRegionId, state],
+    [fetchWeatherForRegion, resetSelection],
   )
 
-  const refresh = useCallback(() => {
-    if (!selectedRegionId || state === "loading") {
-      return
-    }
-    fetchWeatherForRegion(selectedRegionId)
-  }, [fetchWeatherForRegion, selectedRegionId, state])
+  /**
+   * 사용자가 상황을 입력하고 '적용'을 누를 때:
+   * 날씨 API는 다시 부르지 않고, 이미 받아온 weather를 재사용하여 AI와 음악만 빠르게 갱신!
+   */
+  const applySituation = useCallback(
+    (newSituation: string) => {
+      setSituation(newSituation)
+      if (!weather || !selectedRegionId) {
+        return
+      }
+
+      const currentReqId = activeRequestIdRef.current
+      const currentRegId = selectedRegionId
+
+      if (newSituation && newSituation.trim().length > 0) {
+        fetchAiOutfit(weather, newSituation, currentReqId, currentRegId)
+      } else {
+        // 상황이 제거되면 AI 추천 해제하고 기본 추천으로 복귀
+        setAiRecommendation(null)
+        setAiState("idle")
+        setAiErrorMessage(null)
+      }
+
+      // 상황에 맞춘 음악도 새로 조회
+      fetchMusic(weather, newSituation, currentReqId, currentRegId)
+    },
+    [fetchAiOutfit, fetchMusic, selectedRegionId, weather],
+  )
+
+  /**
+   * AI 옷차림 추천만 단독 재시도
+   */
+  const retryAiOutfit = useCallback(() => {
+    if (!weather || !selectedRegionId || !situation) return
+    fetchAiOutfit(weather, situation, activeRequestIdRef.current, selectedRegionId)
+  }, [fetchAiOutfit, selectedRegionId, situation, weather])
+
+  /**
+   * 음악 추천만 단독 재시도
+   */
+  const retryMusic = useCallback(() => {
+    if (!weather || !selectedRegionId) return
+    fetchMusic(weather, situation, activeRequestIdRef.current, selectedRegionId)
+  }, [fetchMusic, selectedRegionId, situation, weather])
+
+  /**
+   * 날씨 새로고침
+   */
+  const refresh = useCallback(
+    (customSituation?: string) => {
+      if (!selectedRegionId) return
+      const sit = customSituation !== undefined ? customSituation : situation
+      fetchWeatherForRegion(selectedRegionId, sit)
+    },
+    [fetchWeatherForRegion, selectedRegionId, situation],
+  )
 
   useEffect(() => {
     return () => {
       clearAllTimers()
-      if (activeAbortController.current) {
-        activeAbortController.current.abort()
-      }
+      abortAllRequests()
     }
-  }, [clearAllTimers])
+  }, [abortAllRequests, clearAllTimers])
+
+  // AI 추천이 있으면 AI 추천을, 없으면 기본 규칙 추천을 반환
+  const activeRecommendation = aiRecommendation || basicRecommendation
 
   return {
     selectedCity: selectedRegionId,
     selectedRegionId,
     selectedRegionLabel,
+    situation,
+    setSituation,
+
     state,
     weather,
-    recommendation,
+    recommendation: activeRecommendation,
     errorMessage,
+    isFetching: state === "loading",
+
+    aiState,
+    aiErrorMessage,
+    retryAiOutfit,
+
+    musicState,
+    music,
+    musicErrorMessage,
+    retryMusic,
+
+    timings,
+
     selectCity: selectRegion,
     selectRegion,
+    applySituation,
+    resetSelection,
     refresh,
-    isFetching: state === "loading",
   }
 }

@@ -3,7 +3,7 @@ import { RawWeatherData } from "@/lib/domain/types"
 import { validateWeatherData } from "@/lib/domain/validator"
 import { detectPrecipitation } from "@/lib/domain/precipitation"
 import { createRecommendation } from "@/lib/domain/recommender"
-import { findKmaRegionById } from "@/lib/domain/regions"
+import { findKmaRegionById, isFullyQualifiedRegion } from "@/lib/domain/regions"
 
 /**
  * 기상청 단기예보 조회서비스 기준 일시 계산 (KST 기준)
@@ -72,6 +72,7 @@ function parseKmaRainfall(rn1Raw?: string | null): number | null {
 }
 
 export async function GET(request: NextRequest) {
+  const reqStartTime = performance.now()
   const { searchParams } = new URL(request.url)
   const regionParam = searchParams.get("regionId") || searchParams.get("city")
 
@@ -93,6 +94,17 @@ export async function GET(request: NextRequest) {
       {
         error: "유효하지 않은 지역입니다. 올바른 대한민국 행정구역을 선택해 주세요.",
         errorType: "INVALID_REGION",
+      },
+      { status: 400 },
+    )
+  }
+
+  // 2-1. 시·도, 시·군·구, 읍·면·동 전체 선택 완료 여부 검증 (요구사항: 상위 지역만 선택 시 검색 차단)
+  if (!isFullyQualifiedRegion(region)) {
+    return NextResponse.json(
+      {
+        error: "시·도, 시·군·구, 읍·면·동을 모두 선택해야 날씨를 조회할 수 있습니다.",
+        errorType: "INCOMPLETE_REGION_SELECTION",
       },
       { status: 400 },
     )
@@ -310,12 +322,18 @@ export async function GET(request: NextRequest) {
     // 공식 전체 주소 라벨을 cityName으로 주입
     validation.data.cityName = region.label
 
-    // PRD F-05, F-06, F-07 추천 생성
+    // 기본 결정론적 규칙 기반 옷차림 추천 즉시 생성 (지연 없음)
     const recommendation = createRecommendation(validation.data)
 
+    const totalElapsedMs = Math.round(performance.now() - reqStartTime)
+
+    // 날씨 및 기본 옷차림 데이터 즉시 반환 (AI/음악 지연과 분리)
     return NextResponse.json({
       weather: validation.data,
       recommendation,
+      timing: {
+        totalElapsedMs,
+      },
     })
   } catch (error: any) {
     clearTimeout(timeoutId)

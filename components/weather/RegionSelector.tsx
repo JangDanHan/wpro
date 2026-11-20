@@ -6,6 +6,7 @@ import { Search, MapPin, ChevronDown, Check, Loader2, X } from "lucide-react"
 interface RegionSelectorProps {
   selectedRegionId: string | null
   onSelectRegion: (regionId: string, label: string) => void
+  onResetSelection?: () => void
   isFetching: boolean
 }
 
@@ -22,18 +23,19 @@ interface SearchResultItem {
   ny: number
 }
 
-// 자주 찾는 대표 지역 (빠른 선택)
+// 자주 찾는 대표 시·도 (빠른 1단계 선택)
 const QUICK_REGIONS = [
-  { label: "서울", value: "seoul" },
-  { label: "광주", value: "gwangju" },
-  { label: "부산", value: "busan" },
-  { label: "세종", value: "세종특별자치시" },
-  { label: "제주", value: "제주특별자치도" },
+  { label: "서울", step1: "서울특별시" },
+  { label: "광주", step1: "광주광역시" },
+  { label: "부산", step1: "부산광역시" },
+  { label: "세종", step1: "세종특별자치시" },
+  { label: "제주", step1: "제주특별자치도" },
 ]
 
 export function RegionSelector({
   selectedRegionId,
   onSelectRegion,
+  onResetSelection,
   isFetching,
 }: RegionSelectorProps) {
   const [tab, setTab] = useState<"step" | "search">("step")
@@ -148,28 +150,31 @@ export function RegionSelector({
     }
   }, [searchQuery])
 
-  // 1단계 시도 선택 시 핸들러
+  // 1단계 시도 선택 시 핸들러 (하위 목록만 불러오고 날씨 API 호출 안 함, 이전 결과 초기화)
   const handleSelectStep1 = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     setSelectedStep1(val)
-    if (val) {
-      // 1단계 선택 시 해당 시·도 대표 격자로 즉시 조회
-      onSelectRegion(val, val)
+    setSelectedStep2("")
+    setSelectedStep3("")
+    setStep2List([])
+    setStep3List([])
+    if (onResetSelection) {
+      onResetSelection()
     }
   }
 
-  // 2단계 시군구 선택 시 핸들러
+  // 2단계 시군구 선택 시 핸들러 (하위 목록만 불러오고 날씨 API 호출 안 함, 이전 결과 초기화)
   const handleSelectStep2 = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     setSelectedStep2(val)
-    if (val) {
-      const label = `${selectedStep1} ${val}`
-      const regionId = `${selectedStep1}-${val}`
-      onSelectRegion(regionId, label)
+    setSelectedStep3("")
+    setStep3List([])
+    if (onResetSelection) {
+      onResetSelection()
     }
   }
 
-  // 3단계 읍면동 선택 시 핸들러
+  // 3단계 읍면동 선택 시 핸들러 (시·도, 시·군·구, 읍·면·동 모두 선택 완료 시에만 검색 실행)
   const handleSelectStep3 = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     setSelectedStep3(val)
@@ -178,10 +183,26 @@ export function RegionSelector({
       if (found) {
         onSelectRegion(found.value, found.label)
       }
+    } else {
+      if (onResetSelection) {
+        onResetSelection()
+      }
     }
   }
 
-  // 검색 결과 선택 시 핸들러
+  // 빠른 선택 칩 클릭 핸들러 (1단계 시·도 설정 및 이전 결과 초기화, 하위 선택 유도)
+  const handleQuickSelectStep1 = (step1Name: string) => {
+    setTab("step")
+    setSelectedStep1(step1Name)
+    setSelectedStep2("")
+    setSelectedStep3("")
+    setStep3List([])
+    if (onResetSelection) {
+      onResetSelection()
+    }
+  }
+
+  // 검색 결과 선택 시 핸들러 (읍·면·동까지 모두 갖춘 항목만 검색 결과로 나옴)
   const handleSelectSearchResult = (item: SearchResultItem) => {
     onSelectRegion(item.value, item.label)
     setSearchOpen(false)
@@ -230,13 +251,13 @@ export function RegionSelector({
           빠른 선택:
         </span>
         {QUICK_REGIONS.map((q) => {
-          const isSelected = selectedRegionId === q.value
+          const isSelected = selectedStep1 === q.step1 && tab === "step"
           return (
             <button
-              key={q.value}
+              key={q.step1}
               type="button"
               disabled={isFetching}
-              onClick={() => onSelectRegion(q.value, q.label)}
+              onClick={() => handleQuickSelectStep1(q.step1)}
               className={`
                 px-2.5 py-1 rounded-md text-xs font-medium transition-all
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500
@@ -247,6 +268,7 @@ export function RegionSelector({
                 }
                 ${isFetching ? "opacity-60 cursor-not-allowed" : "cursor-pointer active:scale-95"}
               `}
+              title={`${q.label} 선택 후 시·군·구 및 읍·면·동을 선택하세요`}
             >
               {q.label}
             </button>
@@ -327,6 +349,17 @@ export function RegionSelector({
             <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-[29px] pointer-events-none" />
           </div>
         </div>
+      )}
+
+      {/* 단계별 선택 진행 가이드 */}
+      {tab === "step" && !selectedStep3 && (
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-0.5">
+          {!selectedStep1
+            ? "💡 시·도 → 시·군·구 → 읍·면·동을 차례로 모두 선택해 주세요."
+            : !selectedStep2 && step2List.length > 0
+              ? "💡 시·군·구를 선택해 주세요."
+              : "💡 마지막으로 읍·면·동을 선택하면 날씨 조회가 시작됩니다."}
+        </p>
       )}
 
       {/* 탭 2: 지역명 통합 검색 (요구사항 3) */}

@@ -5,6 +5,7 @@ import {
   getStep3List,
   searchKmaRegions,
   findKmaRegionById,
+  isFullyQualifiedRegion,
 } from "@/lib/domain/regions"
 
 describe("KMA Official Nationwide Regions Module (전국 공식 행정구역 격자 데이터 검증)", () => {
@@ -75,5 +76,33 @@ describe("KMA Official Nationwide Regions Module (전국 공식 행정구역 격
     expect(busan).toBeDefined()
     expect(busan?.grid.nx).toBe(98)
     expect(busan?.grid.ny).toBe(76)
+  })
+
+  it("isFullyQualifiedRegion은 읍·면·동까지 모두 선택된 경우에만 true를 반환한다", () => {
+    // 1단계 시·도 단독: false
+    const step1Only = findKmaRegionById("광주광역시")
+    expect(isFullyQualifiedRegion(step1Only)).toBe(false)
+
+    // 2단계 시·군·구 단독: false
+    const step2Only = findKmaRegionById("서울특별시-종로구")
+    expect(step2Only).toBeDefined()
+    expect(isFullyQualifiedRegion(step2Only)).toBe(false)
+
+    // 3단계 읍·면·동 완료: true
+    const step3Done = findKmaRegionById("서울특별시-종로구-사직동")
+    expect(isFullyQualifiedRegion(step3Done)).toBe(true)
+
+    // null 또는 undefined: false
+    expect(isFullyQualifiedRegion(null)).toBe(false)
+    expect(isFullyQualifiedRegion(undefined)).toBe(false)
+  })
+
+  it("searchKmaRegions 검색 결과는 읍·면·동까지 모두 갖춘 지역만 반환한다", () => {
+    const results = searchKmaRegions("광주")
+    expect(results.length).toBeGreaterThan(0)
+    for (const r of results) {
+      expect(isFullyQualifiedRegion(r)).toBe(true)
+      expect(r.path.length).toBeGreaterThanOrEqual(3)
+    }
   })
 })

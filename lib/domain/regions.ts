@@ -147,7 +147,20 @@ export function findKmaRegionById(id: string): KmaRegionItem | null {
 }
 
 /**
+ * 시·도, 시·군·구, 읍·면·동이 모두 선택된 완전한 행정구역인지 검증합니다.
+ * - path.length < 3 인 경우: 시·도(1단계) 또는 시·군·구(2단계)만 선택된 미완료 상태
+ * - path.length >= 3 인 경우: 읍·면·동까지 모두 선택 완료된 단말(leaf) 행정구역
+ */
+export function isFullyQualifiedRegion(region: KmaRegionItem | null | undefined): boolean {
+  if (!region || !Array.isArray(region.path)) {
+    return false
+  }
+  return region.path.length >= 3
+}
+
+/**
  * 검색어로 전국 행정구역 검색 (동일 지명은 전체 주소 label로 구분)
+ * - 읍·면·동까지 모두 선택 가능한 단말 지역(path.length >= 3)만 반환
  */
 export function searchKmaRegions(query: string, limit = 20): KmaRegionItem[] {
   const q = query.trim().replace(/\s+/g, "").toLowerCase()
@@ -157,7 +170,9 @@ export function searchKmaRegions(query: string, limit = 20): KmaRegionItem[] {
   const results: KmaRegionItem[] = []
 
   for (const r of regions) {
-    // 읍면동 또는 시군구 단위 위주로 검색 (path 2 이상 선호)
+    // 읍·면·동까지 모두 갖춘 지역만 검색 가능 (시도/시군구 단독 제외)
+    if (r.path.length < 3) continue
+
     if (r.searchKey.toLowerCase().includes(q) || r.label.replace(/\s+/g, "").toLowerCase().includes(q)) {
       results.push(r)
       if (results.length >= limit) break

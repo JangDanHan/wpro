@@ -100,4 +100,17 @@ export interface OutfitRecommendation {
   reason: string
   fixedDisclaimer: string
   missingNotice?: string | null
+  isAiGenerated?: boolean
+  situation?: string | null
+  situationSummary?: string | null
+}
+
+export interface MusicRecommendation {
+  videoId: string
+  title: string
+  channelTitle: string
+  thumbnailUrl: string
+  videoUrl: string
+  searchQuery: string
+  reason: string
 }

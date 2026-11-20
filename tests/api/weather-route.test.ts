@@ -46,10 +46,40 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
     expect(data.errorType).toBe("INVALID_REGION")
   })
 
+  it("시·도만 선택된 경우 400 에러와 INCOMPLETE_REGION_SELECTION을 반환하고 조회를 차단한다", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+
+    // 시·도 1단계만 요청 (예: 광주광역시 또는 seoul)
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=광주광역시")
+    const res = await GET(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.errorType).toBe("INCOMPLETE_REGION_SELECTION")
+    expect(data.error).toContain("시·도, 시·군·구, 읍·면·동을 모두 선택해야")
+    // 기상청 API를 호출하지 않음
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("시·군·구까지만 선택된 경우 400 에러와 INCOMPLETE_REGION_SELECTION을 반환하고 조회를 차단한다", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+
+    // 시·군·구 2단계까지만 요청 (예: 서울특별시 종로구)
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=서울특별시-종로구")
+    const res = await GET(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.errorType).toBe("INCOMPLETE_REGION_SELECTION")
+    expect(data.error).toContain("시·도, 시·군·구, 읍·면·동을 모두 선택해야")
+    // 기상청 API를 호출하지 않음
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it("KMA_API_KEY 환경변수가 없으면 500 에러를 반환한다", async () => {
     delete process.env.KMA_API_KEY
 
-    const req = new NextRequest("http://localhost:3000/api/weather?regionId=seoul")
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=서울특별시-종로구-사직동")
     const res = await GET(req)
     const data = await res.json()
 
@@ -128,7 +158,7 @@ describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 
       text: async () => xmlError,
     } as any)
 
-    const req = new NextRequest("http://localhost:3000/api/weather?regionId=busan")
+    const req = new NextRequest("http://localhost:3000/api/weather?regionId=부산광역시-해운대구-우동")
     const res = await GET(req)
     const data = await res.json()
 
