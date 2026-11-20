@@ -26,6 +26,11 @@ export function SituationInput({
 }: SituationInputProps) {
   const [inputValue, setInputValue] = useState(situation)
 
+  const handleChange = (val: string) => {
+    setInputValue(val)
+    onApplySituation(val)
+  }
+
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     onApplySituation(inputValue.trim())
@@ -62,7 +67,7 @@ export function SituationInput({
         <input
           type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           placeholder="예: 추위를 많이 타고 오늘 면접이 있어"
           disabled={isFetching}
           className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 pr-20 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
@@ -81,13 +86,9 @@ export function SituationInput({
           )}
           <button
             type="submit"
-            disabled={isFetching || !hasSelectedRegion}
-            className={`
-              inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all
-              ${hasSelectedRegion ? "bg-amber-500 hover:bg-amber-600 active:scale-95 cursor-pointer" : "bg-zinc-400 cursor-not-allowed"}
-              disabled:opacity-50
-            `}
-            title={hasSelectedRegion ? "AI 맞춤 추천 적용" : "먼저 지역을 선택해 주세요"}
+            disabled={isFetching}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all bg-amber-500 hover:bg-amber-600 active:scale-95 cursor-pointer disabled:opacity-50"
+            title="상황 입력 적용"
           >
             <Send className="w-3 h-3" />
             <span>적용</span>
@@ -104,9 +105,9 @@ export function SituationInput({
           <button
             key={tag}
             type="button"
-            disabled={isFetching || !hasSelectedRegion}
+            disabled={isFetching}
             onClick={() => handleQuickTagClick(tag)}
-            className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-zinc-750 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-zinc-750 transition-colors cursor-pointer disabled:opacity-50"
           >
             {tag}
           </button>

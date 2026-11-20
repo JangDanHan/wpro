@@ -6,16 +6,18 @@ import { RegionSelector } from "@/components/weather/RegionSelector"
 import { SituationInput } from "@/components/weather/SituationInput"
 import { WeatherCard } from "@/components/weather/WeatherCard"
 import { OutfitCard } from "@/components/weather/OutfitCard"
+import { ChecklistCard } from "@/components/weather/ChecklistCard"
 import { MusicCard } from "@/components/weather/MusicCard"
 import { StateFeedback } from "@/components/weather/StateFeedback"
 import { SourceFooter } from "@/components/weather/SourceFooter"
+import { Sparkles, Loader2, AlertCircle } from "lucide-react"
 
 export function WeatherOutfitApp() {
   const {
     selectedRegionId,
     selectedRegionLabel,
     situation,
-    setSituation,
+    validationError,
     state,
     weather,
     recommendation,
@@ -33,6 +35,7 @@ export function WeatherOutfitApp() {
     applySituation,
     resetSelection,
     refresh,
+    executeRecommendation,
   } = useWeatherRecommendation()
 
   const currentDisplayName = weather?.cityName || selectedRegionLabel || undefined
@@ -51,6 +54,7 @@ export function WeatherOutfitApp() {
         {/* 2. 전국 지역 선택기 (시·도 → 시·군·구 → 읍·면·동 계층 선택 및 검색) */}
         <RegionSelector
           selectedRegionId={selectedRegionId}
+          selectedRegionLabel={selectedRegionLabel}
           onSelectRegion={(regionId, label) => selectRegion(regionId, label)}
           onResetSelection={resetSelection}
           isFetching={isFetching}
@@ -64,18 +68,54 @@ export function WeatherOutfitApp() {
           hasSelectedRegion={Boolean(selectedRegionId)}
         />
 
-        {/* 4. 상태 피드백 (초기 안내, 로딩 스피너, 오류/만료 피드백) */}
+        {/* 4. 추천받기 버튼 및 검증 피드백 (요구사항: ‘추천받기’ 버튼을 눌렀을 때만 입력값 검증 후 조회) */}
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={() => executeRecommendation()}
+            disabled={isFetching}
+            className={`
+              w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white shadow-md transition-all flex items-center justify-center gap-2
+              ${
+                isFetching
+                  ? "bg-sky-400 cursor-not-allowed opacity-80"
+                  : "bg-sky-600 hover:bg-sky-700 active:scale-[0.99] cursor-pointer shadow-sky-500/20"
+              }
+            `}
+          >
+            {isFetching ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>날씨 & 옷차림 불러오는 중...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>날씨 & 옷차림 추천받기</span>
+              </>
+            )}
+          </button>
+
+          {validationError && (
+            <div className="flex items-center gap-2 p-2.5 px-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-600 dark:text-red-400 animate-in fade-in-50">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{validationError}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 5. 상태 피드백 (초기 안내, 로딩 스피너, 오류/만료 피드백) */}
         {!hasResult && (
           <StateFeedback
             state={state}
             errorMessage={errorMessage}
             cityName={currentDisplayName}
-            onRetry={() => refresh()}
+            onRetry={() => executeRecommendation()}
             isFetching={isFetching}
           />
         )}
 
-        {/* 5. 정상/부분 정보 결과 표시 (전체 지역명 포함 날씨 카드 + 옷차림 추천 카드 1개) */}
+        {/* 6. 정상/부분 정보 결과 표시 (전체 지역명 포함 날씨 카드 + 옷차림 추천 카드 + 음악 카드) */}
         {hasResult && (
           <div className="space-y-4 animate-in fade-in-50 duration-300">
             {/* 단계별 소요 시간 측정 표시 */}
@@ -99,6 +139,10 @@ export function WeatherOutfitApp() {
               aiErrorMessage={aiErrorMessage}
               onRetryAi={retryAiOutfit}
             />
+            <ChecklistCard
+              weather={weather}
+              situation={situation}
+            />
             <MusicCard
               music={music}
               musicState={musicState}
@@ -109,7 +153,7 @@ export function WeatherOutfitApp() {
         )}
       </div>
 
-      {/* 6. 출처 및 고지 푸터 (기상청) */}
+      {/* 7. 출처 및 고지 푸터 (기상청) */}
       <div className="w-full max-w-lg mx-auto px-4">
         <SourceFooter
           provider={weather?.provider}

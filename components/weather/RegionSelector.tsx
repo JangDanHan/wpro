@@ -5,6 +5,7 @@ import { Search, MapPin, ChevronDown, Check, Loader2, X } from "lucide-react"
 
 interface RegionSelectorProps {
   selectedRegionId: string | null
+  selectedRegionLabel?: string | null
   onSelectRegion: (regionId: string, label: string) => void
   onResetSelection?: () => void
   isFetching: boolean
@@ -34,6 +35,7 @@ const QUICK_REGIONS = [
 
 export function RegionSelector({
   selectedRegionId,
+  selectedRegionLabel,
   onSelectRegion,
   onResetSelection,
   isFetching,
@@ -211,6 +213,32 @@ export function RegionSelector({
 
   return (
     <section className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs space-y-4">
+      {/* 선택된 지역 확인 배지 (요구사항: 선택한 지역은 입력 화면에서 확인할 수 있게 표시) */}
+      {selectedRegionLabel && (
+        <div className="flex items-center justify-between p-2.5 px-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl text-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">선택된 지역:</span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">{selectedRegionLabel}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedStep3("")
+              if (onResetSelection) onResetSelection()
+            }}
+            disabled={isFetching}
+            className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-md transition-colors"
+            title="선택 해제"
+            aria-label="선택된 지역 해제"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 탭 전환 (단계별 선택 / 지역명 검색) */}
       <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
         <div className="flex items-center gap-1.5">
@@ -358,7 +386,7 @@ export function RegionSelector({
             ? "💡 시·도 → 시·군·구 → 읍·면·동을 차례로 모두 선택해 주세요."
             : !selectedStep2 && step2List.length > 0
               ? "💡 시·군·구를 선택해 주세요."
-              : "💡 마지막으로 읍·면·동을 선택하면 날씨 조회가 시작됩니다."}
+              : "💡 마지막으로 읍·면·동을 선택한 뒤 아래 ‘추천받기’ 버튼을 눌러주세요."}
         </p>
       )}
 

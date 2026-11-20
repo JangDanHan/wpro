@@ -32,6 +32,8 @@ export interface UseWeatherRecommendationReturn {
   selectedRegionLabel: string | null
   situation: string
   setSituation: (situation: string) => void
+  validationError: string | null
+  setValidationError: (error: string | null) => void
 
   // 1. 기상청 날씨 및 기본 옷차림 상태 (즉시 응답)
   state: WeatherViewState
@@ -60,12 +62,14 @@ export interface UseWeatherRecommendationReturn {
   applySituation: (newSituation: string) => void
   resetSelection: () => void
   refresh: (customSituation?: string) => void
+  executeRecommendation: () => Promise<void>
 }
 
 export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null)
   const [selectedRegionLabel, setSelectedRegionLabel] = useState<string | null>(null)
   const [situation, setSituation] = useState<string>("")
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // 1. 날씨 및 기본 옷차림 상태
   const [state, setState] = useState<WeatherViewState>("idle")
@@ -142,33 +146,12 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     }
   }, [])
 
-  // 지역 미선택 또는 상위 지역 변경 시 전체 초기화
+  // 지역 선택 해제 또는 초기화
   const resetSelection = useCallback(() => {
-    abortAllRequests()
-    clearAllTimers()
-    activeRequestIdRef.current += 1
-    activeRegionIdRef.current = null
-
     setSelectedRegionId(null)
     setSelectedRegionLabel(null)
-    setWeather(null)
-    setBasicRecommendation(null)
-    setAiRecommendation(null)
-    setMusic(null)
-    setErrorMessage(null)
-    setAiErrorMessage(null)
-    setMusicErrorMessage(null)
-    setState("idle")
-    setAiState("idle")
-    setMusicState("idle")
-    setTimings({
-      weatherMs: null,
-      aiOutfitMs: null,
-      musicTotalMs: null,
-      geminiMusicMs: null,
-      youtubeMs: null,
-    })
-  }, [abortAllRequests, clearAllTimers])
+    setValidationError(null)
+  }, [])
 
   /**
    * 독립 요청: AI 맞춤 옷차림 추천 호출
@@ -525,50 +508,47 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   )
 
   /**
-   * 지역 선택
+   * 지역 선택 (요구사항: 선택한 지역만 입력값에 저장하고 즉시 날씨를 조회하지 않음)
    */
   const selectRegion = useCallback(
     (regionId: string, label?: string, customSituation?: string) => {
       if (!regionId || regionId.trim() === "") {
-        resetSelection()
+        setSelectedRegionId(null)
+        setSelectedRegionLabel(null)
         return
       }
       setSelectedRegionId(regionId)
       if (label) setSelectedRegionLabel(label)
       if (customSituation !== undefined) setSituation(customSituation)
-      fetchWeatherForRegion(regionId, customSituation)
+      setValidationError(null)
     },
-    [fetchWeatherForRegion, resetSelection],
+    [],
   )
 
   /**
-   * 사용자가 상황을 입력하고 '적용'을 누를 때:
-   * 날씨 API는 다시 부르지 않고, 이미 받아온 weather를 재사용하여 AI와 음악만 빠르게 갱신!
+   * 사용자가 상황을 입력하고 설정할 때:
+   * (요구사항: 조건을 수정해도 자동으로 재조회하지 않고, '추천받기' 버튼 클릭 시 일괄 반영)
    */
-  const applySituation = useCallback(
-    (newSituation: string) => {
-      setSituation(newSituation)
-      if (!weather || !selectedRegionId) {
-        return
-      }
+  const applySituation = useCallback((newSituation: string) => {
+    setSituation(newSituation)
+  }, [])
 
-      const currentReqId = activeRequestIdRef.current
-      const currentRegId = selectedRegionId
+  /**
+   * '추천받기' 버튼 클릭 핸들러 (요구사항: 필수 입력 검증 후 날씨 조회 실행, 중복 방지)
+   */
+  const executeRecommendation = useCallback(async () => {
+    if (state === "loading") {
+      return
+    }
 
-      if (newSituation && newSituation.trim().length > 0) {
-        fetchAiOutfit(weather, newSituation, currentReqId, currentRegId)
-      } else {
-        // 상황이 제거되면 AI 추천 해제하고 기본 추천으로 복귀
-        setAiRecommendation(null)
-        setAiState("idle")
-        setAiErrorMessage(null)
-      }
+    if (!selectedRegionId) {
+      setValidationError("지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)")
+      return
+    }
 
-      // 상황에 맞춘 음악도 새로 조회
-      fetchMusic(weather, newSituation, currentReqId, currentRegId)
-    },
-    [fetchAiOutfit, fetchMusic, selectedRegionId, weather],
-  )
+    setValidationError(null)
+    await fetchWeatherForRegion(selectedRegionId, situation)
+  }, [fetchWeatherForRegion, selectedRegionId, situation, state])
 
   /**
    * AI 옷차림 추천만 단독 재시도
@@ -587,7 +567,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   }, [fetchMusic, selectedRegionId, situation, weather])
 
   /**
-   * 날씨 새로고침
+   * 날씨 새로고침 (카드의 새로고침 버튼 등)
    */
   const refresh = useCallback(
     (customSituation?: string) => {
@@ -614,6 +594,8 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     selectedRegionLabel,
     situation,
     setSituation,
+    validationError,
+    setValidationError,
 
     state,
     weather,
@@ -637,5 +619,6 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     applySituation,
     resetSelection,
     refresh,
+    executeRecommendation,
   }
 }
