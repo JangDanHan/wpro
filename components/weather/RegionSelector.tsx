@@ -190,7 +190,7 @@ function SearchableSelect({
   const selectedText = displayValue || value
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className={`relative ${isOpen ? "z-30" : "z-10"}`} ref={containerRef}>
       <label
         htmlFor={id}
         className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1"
