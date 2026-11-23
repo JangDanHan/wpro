@@ -574,17 +574,20 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
         )
         return
       }
-      setValidationError(null)
 
-      // 2. 이미 유효한 날씨 데이터가 있는 경우: 날씨/음악 재조회 없이 AI 맞춤 코디만 단독 실행!
+      // 2. 상황 입력 검증
+      if (!trimmedSituation) {
+        setValidationError(
+          "상황을 입력해 주세요. (예: 추위를 많이 타고 오늘 중요한 면접이 있어)",
+        )
+        return
+      }
+
+      setValidationError(null)
+      setSituation(trimmedSituation)
+
+      // 3. 이미 유효한 날씨 데이터가 있는 경우: 날씨/음악 재조회 없이 AI 맞춤 코디만 단독 실행!
       if (weather) {
-        if (!trimmedSituation) {
-          // 상황이 비워진 경우 AI 추천 해제하고 기본 추천으로 복귀
-          setAiRecommendation(null)
-          setAiState("idle")
-          setAiErrorMessage(null)
-          return
-        }
         await fetchAiOutfit(weather, trimmedSituation, activeRequestIdRef.current, selectedRegionId)
         return
       }

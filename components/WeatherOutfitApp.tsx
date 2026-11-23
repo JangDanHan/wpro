@@ -19,6 +19,7 @@ export function WeatherOutfitApp() {
     selectedRegionLabel,
     situation,
     validationError,
+    setValidationError,
     state,
     weather,
     recommendation,
@@ -47,10 +48,6 @@ export function WeatherOutfitApp() {
   const hasResult = (state === "success" || state === "partial") && weather && recommendation
   const resultsRef = useRef<HTMLDivElement>(null)
 
-  const handleApplySituation = (newSituation: string) => {
-    applySituation(newSituation)
-  }
-
   // 상황 적용 시 상황 맞춤 AI 추천만 독립 실행 (하단 전체 로딩이나 화면 강제 이동 없음)
   const handleApplyAndExecute = async (newSituation: string) => {
     await applySituationAndExecute(newSituation)
@@ -74,10 +71,10 @@ export function WeatherOutfitApp() {
         {/* 3. 상황 맞춤 AI 코디 입력란 (선택 사항) */}
         <SituationInput
           situation={situation}
-          onApplySituation={handleApplySituation}
           onApplyAndExecute={handleApplyAndExecute}
           isSituationLoading={isSituationLoading}
           hasSelectedRegion={Boolean(selectedRegionId)}
+          onValidationError={setValidationError}
         />
 
         {/* 4. 추천받기 버튼 및 검증 피드백 */}

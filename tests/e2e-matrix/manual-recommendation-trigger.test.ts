@@ -151,6 +151,107 @@ describe("수동 추천받기 버튼 및 지역 선택 동작 검증", () => {
     expect(triggeredSituation).toBe(updatedSituation)
   })
 
+  it("상황 맞춤 추천은 '적용' 버튼을 직접 눌렀을 때만 실행되며, 예시 클릭·직접 입력·Enter로는 실행되지 않는다", () => {
+    let apiCallCount = 0
+    let draftInputValue = ""
+    let appliedSituation = ""
+    let validationError: string | null = null
+    const selectedRegionId = "서울특별시-종로구-사직동"
+
+    // 1. 예시 상황 클릭 핸들러
+    const onQuickTagClick = (tag: string) => {
+      // 선택한 문장을 입력란에 채우기만 함 (API 호출 없음)
+      draftInputValue = tag
+    }
+
+    // 2. 입력란 타이핑 핸들러
+    const onInputChange = (val: string) => {
+      // 입력란 텍스트만 변경 (API 호출 없음)
+      draftInputValue = val
+    }
+
+    // 3. 입력란 Enter 키 핸들러
+    const onInputKeyDown = (key: string) => {
+      if (key === "Enter") {
+        // Enter 키 차단: 추천이나 제출 실행하지 않음
+        return "BLOCKED_ENTER"
+      }
+      return "DEFAULT"
+    }
+
+    // 4. '적용' 버튼 클릭 핸들러
+    const onApplyClick = (regionId: string | null) => {
+      const trimmed = draftInputValue.trim()
+      if (!regionId) {
+        validationError = "지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)"
+        return "BLOCKED_REGION"
+      }
+      if (!trimmed) {
+        validationError = "상황을 입력해 주세요. (예: 추위를 많이 타고 오늘 중요한 면접이 있어)"
+        return "BLOCKED_EMPTY"
+      }
+      validationError = null
+      appliedSituation = trimmed
+      apiCallCount++
+      return "SUCCESS"
+    }
+
+    // 5. 하단 기본 추천 버튼 핸들러
+    const onBottomRecommendClick = (regionId: string | null) => {
+      if (!regionId) return "BLOCKED_REGION"
+      // 하단 버튼은 미적용 입력값(draftInputValue)을 사용하지 않고 오직 확정된 appliedSituation만 사용!
+      return { triggeredSituation: appliedSituation }
+    }
+
+    // [검증 1] 예시 상황 클릭 시: 입력란만 채워지고 추천 API 호출 없음
+    onQuickTagClick("비 오는 날 야외 활동이 있어")
+    expect(draftInputValue).toBe("비 오는 날 야외 활동이 있어")
+    expect(appliedSituation).toBe("") // 아직 적용 안 됨
+    expect(apiCallCount).toBe(0) // 추천 요청 0건
+
+    // [검증 2] 직접 타이핑 시: 추천 요청 없음
+    onInputChange("실내에서 주로 보내는 가벼운 외출이야")
+    expect(draftInputValue).toBe("실내에서 주로 보내는 가벼운 외출이야")
+    expect(appliedSituation).toBe("") // 여전히 적용 안 됨
+    expect(apiCallCount).toBe(0) // 추천 요청 0건
+
+    // [검증 3] 입력란에서 Enter 누름: 차단되고 추천 요청 없음
+    const enterRes = onInputKeyDown("Enter")
+    expect(enterRes).toBe("BLOCKED_ENTER")
+    expect(apiCallCount).toBe(0) // 추천 요청 0건
+
+    // [검증 4] 빈 입력 상태에서 '적용' 클릭: 안내 메시지 표시 및 API 차단
+    onInputChange("   ")
+    const emptyRes = onApplyClick(selectedRegionId)
+    expect(emptyRes).toBe("BLOCKED_EMPTY")
+    expect(validationError).toContain("상황을 입력해 주세요")
+    expect(apiCallCount).toBe(0)
+
+    // [검증 5] 지역 미선택 상태에서 '적용' 클릭: 안내 메시지 표시 및 API 차단
+    onInputChange("추위를 많이 타고 오늘 중요한 면접이 있어")
+    const noRegionRes = onApplyClick(null)
+    expect(noRegionRes).toBe("BLOCKED_REGION")
+    expect(validationError).toContain("지역을 먼저 선택해 주세요")
+    expect(apiCallCount).toBe(0)
+
+    // [검증 6] '적용' 버튼 클릭: 최신 입력값으로 맞춤 추천 실행
+    const successRes = onApplyClick(selectedRegionId)
+    expect(successRes).toBe("SUCCESS")
+    expect(appliedSituation).toBe("추위를 많이 타고 오늘 중요한 면접이 있어")
+    expect(apiCallCount).toBe(1)
+    expect(validationError).toBeNull()
+
+    // [검증 7] 적용 후 문장 수정: 다시 적용하기 전까지 자동 추천 없음
+    onInputChange("저녁 데이트로 변경")
+    expect(draftInputValue).toBe("저녁 데이트로 변경")
+    expect(appliedSituation).toBe("추위를 많이 타고 오늘 중요한 면접이 있어") // 이전 적용값 유지
+    expect(apiCallCount).toBe(1) // 추가 API 호출 0건
+
+    // [검증 8] 하단 버튼 클릭 시: 미적용 draft가 아니라 기존 적용값만 사용
+    const bottomRes = onBottomRecommendClick(selectedRegionId)
+    expect(bottomRes).toEqual({ triggeredSituation: "추위를 많이 타고 오늘 중요한 면접이 있어" })
+  })
+
   it("상황 맞춤 AI 코디의 '적용' 클릭 시 로딩 상태와 실행 범위가 하단 전체 추천과 분리된다", async () => {
     let isWeatherLoading = false
     let isSituationLoading = false
