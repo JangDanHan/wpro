@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getBasicOutfit, OUTFIT_RULES } from "@/lib/domain/outfit"
+import { getBasicOutfit, getCategorizedOutfit, OUTFIT_RULES } from "@/lib/domain/outfit"
 
 describe("Outfit Recommender (PRD F-05, EX-14)", () => {
   it("0℃ 미만 구간 (T-01)", () => {
@@ -51,5 +51,29 @@ describe("Outfit Recommender (PRD F-05, EX-14)", () => {
       expect(outfit.basicOutfit).toBeTruthy()
       expect(OUTFIT_RULES.some((r) => r.id === outfit.id)).toBe(true)
     }
+  })
+
+  it("getCategorizedOutfit은 아우터·상의·하의·신발을 일반적인 옷 종류 텍스트로 안내해야 한다", () => {
+    // 영하 혹한기
+    const winter = getCategorizedOutfit(-5, "none", "데이트")
+    expect(winter.outer).toMatch(/(패딩|파카)/)
+    expect(winter.top).toMatch(/(니트|스웨터)/)
+    expect(winter.bottom).toMatch(/(기모|데님|바지)/)
+    expect(winter.shoes).toMatch(/(방한화|부츠)/)
+
+    // 비 오는 날 강수 대비
+    const rainy = getCategorizedOutfit(3, "rain", "출근")
+    expect(rainy.shoes).toMatch(/(레인부츠|방수)/)
+
+    // 온화한 날씨
+    const mild = getCategorizedOutfit(18, "none", "산책")
+    expect(mild.top).toMatch(/(셔츠|티셔츠)/)
+    expect(mild.bottom).toMatch(/(슬랙스|청바지)/)
+
+    // 한여름 폭염
+    const hot = getCategorizedOutfit(30, "none")
+    expect(hot.top).toMatch(/(린넨|반팔)/)
+    expect(hot.bottom).toMatch(/(반바지|쇼츠|린넨)/)
+    expect(hot.shoes).toMatch(/(샌들|통기성)/)
   })
 })

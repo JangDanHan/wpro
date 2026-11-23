@@ -1,37 +1,32 @@
 import { OutfitRecommendation, ValidatedWeatherData } from "./types"
-import { FIXED_DISCLAIMER, getBasicOutfit } from "./outfit"
+import { FIXED_DISCLAIMER, getBasicOutfit, getCategorizedOutfit } from "./outfit"
 import { getPrecipitationNotice } from "./precipitation"
 import { generateReason } from "./reason"
-import {
-  getMusinsaSnapRecommendations,
-  TARGET_MUSINSA_PROFILE_URL,
-} from "./musinsa-snap-catalog"
 
 /**
- * PRD 3.3. 옷차림 추천 카드 생성기
+ * PRD 3.3. 옷차림 추천 카드 생성기 (텍스트 중심 안내)
  * 1. 제목: ‘지금 참고할 옷차림’
  * 2. 기본 옷차림
- * 3. 비·눈이 확인된 경우 강수 대비 항목
- * 4. 실제 날씨와 연결한 추천 이유
- * 5. 필요한 경우 정보 누락 안내
- * 6. 무신사 스냅 실제 코디 게시물(단일 완성 룩) 매핑
- * 7. 무신사 원문 연결 URL 및 비공식 안내 고지
+ * 3. 아우터·상의·하의·신발 부위별 간결한 텍스트 안내
+ * 4. 비·눈이 확인된 경우 강수 대비 항목
+ * 5. 실제 날씨(기온·바람·강수)와 연결한 구체적인 추천 이유
+ * 6. 필요한 경우 정보 누락 안내
+ * 7. 고정 안내 문구
  */
 export function createRecommendation(
   weather: ValidatedWeatherData,
   situation?: string | null,
 ): OutfitRecommendation {
   const outfitRule = getBasicOutfit(weather.temperature)
+  const categorizedOutfit = getCategorizedOutfit(
+    weather.temperature,
+    weather.precipitationType,
+    situation,
+  )
   const precipitationNotice = getPrecipitationNotice(weather.precipitationType)
   const reason = generateReason(
     weather.temperature,
     outfitRule.basicOutfit,
-    weather.precipitationType,
-  )
-
-  const { primary, alternatives } = getMusinsaSnapRecommendations(
-    weather.temperature,
-    situation,
     weather.precipitationType,
   )
 
@@ -57,26 +52,7 @@ export function createRecommendation(
     reason,
     fixedDisclaimer: FIXED_DISCLAIMER,
     missingNotice,
-    snapPostId: primary.snapId,
-    snapUrl: primary.postUrl,
-    musinsaProfileUrl: TARGET_MUSINSA_PROFILE_URL,
-    clothingItems: primary.clothingItems,
-    style: primary.style,
-    styleName: primary.styleName,
-    productItems: primary.productItems,
-    alternativeOutfits: alternatives.map((alt) => ({
-      id: alt.id,
-      snapPostId: alt.snapId,
-      snapUrl: alt.postUrl,
-      style: alt.style,
-      styleName: alt.styleName,
-      title: alt.title,
-      clothingItems: alt.clothingItems,
-      description: alt.description,
-      photoUrl: alt.productItems[0]?.photoUrl || "",
-      photoCredit: "Flat Lay Product Studio Cut",
-      productItems: alt.productItems,
-    })),
+    situation,
+    categorizedOutfit,
   }
 }
-

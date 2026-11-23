@@ -112,6 +112,13 @@ export interface ProductItem {
   }
 }
 
+export interface CategorizedOutfitText {
+  outer: string // 아우터 (외투)
+  top: string // 상의
+  bottom: string // 하의
+  shoes: string // 신발
+}
+
 export interface OutfitRecommendation {
   title: string // '지금 참고할 옷차림'
   temperature: number
@@ -123,35 +130,15 @@ export interface OutfitRecommendation {
   isAiGenerated?: boolean
   situation?: string | null
   situationSummary?: string | null
-  // 무신사 스냅 기반 코디 추천 확장 필드
-  snapPostId?: string
-  snapUrl?: string // 무신사 원문 게시물 URL (https://www.musinsa.com/snap/...)
-  musinsaProfileUrl?: string // 추천 대상 프로필 URL (https://www.musinsa.com/snap/profile/1234627203913810064)
-  creatorName?: string // 크리에이터 / 작성자
-  photoUrl?: string
+  categorizedOutfit?: CategorizedOutfitText // 아우터·상의·하의·신발 텍스트 안내
+  // 호환성 필드
   clothingItems?: string
-  style?: "casual" | "formal" | "comfort" | "street" | "minimal"
+  style?: string
   styleName?: string
+  photoUrl?: string
   photoCredit?: string
-  productItems?: ProductItem[] // 해당 완성 코디에 포함된 개별 아이템들
-  isWeatherVerified?: boolean // 날씨 적합성 검증 완료 여부
-  unverifiedReason?: string | null // 날씨 적합성 추가 확인 필요 이유
-  alternativeOutfits?: Array<{
-    id: string
-    snapPostId?: string
-    snapUrl?: string
-    creatorName?: string
-    style: "casual" | "formal" | "comfort" | "street" | "minimal"
-    styleName: string
-    title: string
-    clothingItems: string
-    description: string
-    photoUrl: string
-    photoCredit: string
-    productItems?: ProductItem[]
-    isWeatherVerified?: boolean
-    unverifiedReason?: string | null
-  }>
+  productItems?: ProductItem[]
+  alternativeOutfits?: Array<any>
 }
 
 export interface MusicRecommendation {
