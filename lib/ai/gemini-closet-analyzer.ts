@@ -23,6 +23,22 @@ function getGeminiApiKey(): string | null {
   return null
 }
 
+export interface GarmentMaskItem {
+  id: string
+  category: ClothingCategory
+  name: string
+  // 정규화 좌표(0~1000) [x, y] 외곽선 폴리곤 다각형
+  polygon: [number, number][]
+  // 제외할 내부 구멍 (목둘레 안쪽 피부, 소매-몸통 사이 배경 등)
+  holes?: [number, number][][]
+  cropBox?: {
+    ymin: number
+    xmin: number
+    ymax: number
+    xmax: number
+  }
+}
+
 export interface ClothingAnalysisResult {
   category: ClothingCategory
   name: string
@@ -40,7 +56,12 @@ export interface ClothingAnalysisResult {
   
   confidenceNotes: string
 
-  // 쇼핑몰 UI(하트, 뱃지 등)나 주변 배경을 제외한 의류 본체만의 스마트 크롭 좌표 (0~1000)
+  // 사진에서 감지된 개별 의류 세그멘테이션 목록
+  detectedGarments?: GarmentMaskItem[]
+  
+  // 기본 선택된 주요 의류의 다각형 좌표 및 크롭 영역
+  primaryPolygon?: [number, number][]
+  primaryHoles?: [number, number][][]
   cropBox?: {
     ymin: number
     xmin: number
@@ -56,16 +77,16 @@ const VISION_MODELS = [
 ]
 
 /**
- * 옷 사진(Base64)을 Gemini Vision으로 분석하여 카테고리/색상/패턴/계절/스타일 및 쇼핑몰 UI 제외 크롭 좌표 추출
+ * 옷 사진(Base64)을 Gemini Vision으로 분석하여 의류 분리 세그멘테이션 및 속성 추출
  */
 export async function analyzeClothingImage(
   imageBase64: string,
   mimeType = "image/jpeg",
   signal?: AbortSignal,
+  targetCategory?: ClothingCategory,
 ): Promise<ClothingAnalysisResult> {
   const apiKey = getGeminiApiKey()
 
-  // Base64 순수 데이터 추출
   const pureBase64 = imageBase64.includes(",")
     ? imageBase64.split(",")[1]
     : imageBase64
@@ -75,34 +96,55 @@ export async function analyzeClothingImage(
   }
 
   const prompt = `
-당신은 최고의 패션 의류 분석 및 상품 사진 정제 전문가입니다. 제공된 사진 속의 단일 의류 또는 신발 아이템을 분석하여 JSON 형식으로만 답변하세요.
+당신은 최고 수준의 패션 의류 세그멘테이션 및 이미지 정제 AI 전문가입니다.
+사용자가 제공한 사진 속에서 패션 의류/신발 아이템을 정밀하게 분리하고 속성을 분석하여 JSON으로만 답변하세요.
+
+[핵심 목표]
+사람이 옷을 입고 있는 사진이나 쇼핑몰 모델 샷, 옷걸이 사진 등에서 "오직 지정된 의류 영역 자체만" 남기고, 그 외 모든 것(얼굴, 머리카락, 목·팔·다리·손의 피부, 다른 의류, 신발, 옷걸이, 쇼핑몰 하트 버튼·배너, 배경)을 완벽히 제거하기 위한 외곽선 폴리곤 좌표(0~1000 정규화 좌표)를 제공하세요.
 
 주의사항:
-1. 사진 속 옷의 카테고리(상의, 하의, 아우터, 원피스, 신발, 가방, 기타 중 하나)를 정확히 판별하세요.
-2. 쇼핑몰 캡처인 경우, 하단 또는 상단에 나타나는 쇼핑몰 UI(하트 버튼, 브랜드 뱃지, 무신사 마크, 컬러 선택 점, 가격표 등)를 제외하고 오직 옷 또는 신발만 포함하는 정규화 바운딩 박스(0~1000 단위: ymin, xmin, ymax, xmax)를 계산해 "cropBox" 필드에 넣으세요.
-3. 옷 자체의 프린트(예: 그래픽, 로고, 숫자 등), 소재감, 색상은 그대로 보존되어야 합니다.
-4. 소재(재질), 두께, 보온성은 사진만으로 100% 확정하기 어려우므로, 시각적으로 보이는 질감 기반의 '추정치'로 제시하고 사용자가 수정할 수 있도록 플래그를 true로 설정하세요.
-5. 응답은 반드시 아래 JSON 스키마를 엄격히 따라야 하며 markdown 코드블록 없이 순수 JSON만 반환하세요:
+1. 사람이 니트와 청바지를 입고 있다면:
+   - 니트(상의)를 분리할 때는: 얼굴, 목의 피부, 머리카락, 손, 청바지, 신발, 배경을 모두 제외하고 순수 니트 옷감의 외곽선만 "polygon"으로 지정해야 합니다.
+   - 목둘레 안쪽으로 보이는 피부나 소매와 허리 사이의 배경은 "holes" (제외할 내부 영역)로 좌표를 반환하세요.
+2. 쇼핑몰 캡처인 경우: 하단/상단에 있는 하트 버튼, 가격, 컬러칩 점, 무신사 뱃지 등 상품 외 요소를 절대 폴리곤에 포함하지 마세요.
+3. 사진 속에 여러 의류가 있다면 "detectedGarments" 배열에 각각(상의, 하의 등) 분리해 넣으세요.
+4. "polygon"은 정규화 좌표 0~1000 범위의 [x, y] 순서 점들(최소 8개~최대 40개의 점으로 정밀하게 형태를 따라가는 다각형)입니다.
+5. 응답은 markdown 코드블록 없이 순수 JSON만 반환하세요:
 
 {
   "category": "top" | "bottom" | "outer" | "dress" | "shoes" | "bag" | "accessory" | "etc",
-  "name": "예: 차콜 반집업 울 니트",
-  "subCategory": "예: 하프집업 니트",
+  "name": "예: 차콜 반집업 니트",
+  "subCategory": "하프집업 니트",
   "colors": ["차콜", "블랙"],
-  "pattern": "무지" | "스트라이프" | "체크" | "플로럴" | "그래픽" | "도트" | "기타",
+  "pattern": "무지" | "스트라이프" | "체크" | "플로럴" | "그래픽" | "기타",
   "style": "casual" | "formal" | "minimal" | "street" | "sporty" | "feminine" | "dandy" | "etc",
-  "seasons": ["spring", "summer", "autumn", "winter", "all"] 중 선택,
+  "seasons": ["spring", "summer", "autumn", "winter", "all"],
   "isMaterialInferred": true,
-  "suggestedMaterial": "예: 울/아크릴 혼방 추정 (사용자 확인 필요)",
+  "suggestedMaterial": "울/혼방 추정 (사용자 확인 필요)",
   "thickness": "thin" | "medium" | "thick",
   "warmth": "low" | "medium" | "high",
+  "primaryPolygon": [
+    [250, 120], [750, 120], [820, 350], [740, 780], [260, 780], [180, 350]
+  ],
+  "primaryHoles": [
+    [[450, 120], [550, 120], [530, 220], [470, 220]]
+  ],
   "cropBox": {
-    "ymin": 0,
-    "xmin": 0,
-    "ymax": 860,
-    "xmax": 1000
+    "ymin": 100,
+    "xmin": 160,
+    "ymax": 800,
+    "xmax": 840
   },
-  "confidenceNotes": "쇼핑몰 UI 및 배경을 분리하고 상품 본체 영역을 감지했습니다."
+  "detectedGarments": [
+    {
+      "id": "g-1",
+      "category": "top",
+      "name": "차콜 반집업 니트",
+      "polygon": [[250, 120], [750, 120], [820, 350], [740, 780], [260, 780], [180, 350]],
+      "holes": [[[450, 120], [550, 120], [530, 220], [470, 220]]]
+    }
+  ],
+  "confidenceNotes": "사람 얼굴, 목 피부, 다른 의류를 제외하고 선택 의류 영역만 정밀 마스킹했습니다."
 }
 `
 
@@ -133,21 +175,17 @@ export async function analyzeClothingImage(
             responseMimeType: "application/json",
           },
         }),
-        signal: signal || AbortSignal.timeout(6000),
+        signal: signal || AbortSignal.timeout(7000),
       })
 
-      if (!response.ok) {
-        continue
-      }
+      if (!response.ok) continue
 
       const data = await response.json()
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text
       if (!rawText) continue
 
       const parsed = parseAnalysisJson(rawText)
-      if (parsed) {
-        return parsed
-      }
+      if (parsed) return parsed
     } catch {
       continue
     }
@@ -179,17 +217,58 @@ function parseAnalysisJson(raw: string): ClothingAnalysisResult | null {
     const validWarmth: WarmthLevel[] = ["low", "medium", "high"]
     const warmth: WarmthLevel = validWarmth.includes(data.warmth) ? data.warmth : "medium"
 
-    let cropBox: { ymin: number; xmin: number; ymax: number; xmax: number } | undefined = undefined
-    if (
-      data.cropBox &&
-      typeof data.cropBox.ymin === "number" &&
-      typeof data.cropBox.ymax === "number"
-    ) {
+    let primaryPolygon: [number, number][] | undefined = undefined
+    if (Array.isArray(data.primaryPolygon) && data.primaryPolygon.length >= 3) {
+      primaryPolygon = data.primaryPolygon.map((pt: any) => [
+        Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+        Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+      ])
+    }
+
+    let primaryHoles: [number, number][][] | undefined = undefined
+    if (Array.isArray(data.primaryHoles)) {
+      primaryHoles = data.primaryHoles
+        .filter((h: any) => Array.isArray(h) && h.length >= 3)
+        .map((h: any) =>
+          h.map((pt: any) => [
+            Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+            Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+          ]),
+        )
+    }
+
+    let detectedGarments: GarmentMaskItem[] | undefined = undefined
+    if (Array.isArray(data.detectedGarments)) {
+      detectedGarments = data.detectedGarments
+        .filter((g: any) => g && Array.isArray(g.polygon))
+        .map((g: any, i: number) => ({
+          id: g.id || `g-${i}`,
+          category: validCategories.includes(g.category) ? g.category : category,
+          name: g.name || `${g.category || "의류"}`,
+          polygon: g.polygon.map((pt: any) => [
+            Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+            Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+          ]),
+          holes: Array.isArray(g.holes)
+            ? g.holes.map((h: any) =>
+                h.map((pt: any) => [
+                  Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+                  Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+                ]),
+              )
+            : undefined,
+        }))
+    }
+
+    let cropBox = data.cropBox
+    if (!cropBox && primaryPolygon && primaryPolygon.length > 0) {
+      const xs = primaryPolygon.map((p) => p[0])
+      const ys = primaryPolygon.map((p) => p[1])
       cropBox = {
-        ymin: Math.max(0, Math.min(1000, data.cropBox.ymin)),
-        xmin: Math.max(0, Math.min(1000, data.cropBox.xmin || 0)),
-        ymax: Math.max(0, Math.min(1000, data.cropBox.ymax)),
-        xmax: Math.max(0, Math.min(1000, data.cropBox.xmax || 1000)),
+        xmin: Math.max(0, Math.min(...xs)),
+        xmax: Math.min(1000, Math.max(...xs)),
+        ymin: Math.max(0, Math.min(...ys)),
+        ymax: Math.min(1000, Math.max(...ys)),
       }
     }
 
@@ -206,7 +285,10 @@ function parseAnalysisJson(raw: string): ClothingAnalysisResult | null {
       thickness,
       warmth,
       cropBox,
-      confidenceNotes: data.confidenceNotes || "쇼핑몰 UI를 제외한 상품 본체 영역이 정돈되었습니다.",
+      primaryPolygon,
+      primaryHoles,
+      detectedGarments,
+      confidenceNotes: data.confidenceNotes || "사람과 배경을 제외하고 선택한 의류를 분리했습니다.",
     }
   } catch {
     return null
@@ -230,11 +312,14 @@ export function generateFallbackAnalysis(): ClothingAnalysisResult {
     thickness: "medium",
     warmth: "medium",
     cropBox: {
-      ymin: 15,
-      xmin: 15,
-      ymax: 870,
-      xmax: 985,
+      ymin: 20,
+      xmin: 20,
+      ymax: 865,
+      xmax: 980,
     },
-    confidenceNotes: "상품 사진이 스튜디오 배경으로 정돈되었습니다. 세부 속성을 확인하고 저장해주세요.",
+    primaryPolygon: [
+      [200, 100], [800, 100], [880, 400], [780, 850], [220, 850], [120, 400]
+    ],
+    confidenceNotes: "선택한 의류 영역을 분리했습니다. 브러시로 필요한 부분을 수정할 수 있습니다.",
   }
 }

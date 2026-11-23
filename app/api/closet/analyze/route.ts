@@ -4,7 +4,7 @@ import { analyzeClothingImage, generateFallbackAnalysis } from "@/lib/ai/gemini-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
-    const { imageBase64, mimeType } = body
+    const { imageBase64, mimeType, targetCategory } = body
 
     if (!imageBase64 || typeof imageBase64 !== "string") {
       return NextResponse.json(
@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
         imageBase64,
         mimeType || "image/jpeg",
         controller.signal,
+        targetCategory,
       )
       clearTimeout(timeoutId)
       return NextResponse.json({ success: true, analysis: result })
