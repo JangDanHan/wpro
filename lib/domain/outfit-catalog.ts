@@ -1,3 +1,5 @@
+import { ProductItem } from "@/lib/domain/types"
+
 export type OutfitStyle = "casual" | "formal" | "comfort"
 
 export interface CuratedOutfit {
@@ -9,20 +11,21 @@ export interface CuratedOutfit {
   title: string
   clothingItems: string // 예: "숏패딩 + 기모 맨투맨 + 와이드 데님"
   description: string // 짧은 추천 이유
-  photoUrl: string // 고화질 실제 착장 사진 (Unsplash Free License)
+  photoUrl: string // 대표 사진 (개별 상품 썸네일 조합용)
   photoCredit: string
+  productItems: ProductItem[] // 상의·하의·아우터·신발 등 개별 단독 상품 사진
   weatherConditions?: Array<"any" | "rain" | "snow" | "clear" | "cloudy" | "wind">
-  situationTags?: string[] // 면접, 출근, 데이트, 운동, 산책 등
+  situationTags?: string[]
 }
 
 /**
- * 기온 및 스타일별 고화질 착장 사진 카탈로그
- * - 출처: Unsplash (Free License, 상업/비상업 자유 이용)
- * - 각 코디 사진과 실제 옷 구성(외투, 상의, 하의)이 일치하도록 정밀 매핑
+ * 기온 및 스타일별 개별 상품 사진(스튜디오 단독 룩) 코디 카탈로그
+ * - 사람 착용 사진 대신 흰색/밝은 배경의 옷·신발 단독 상품 사진 적용
+ * - Unsplash Free License 고화질 스튜디오/플랫레이 상품 사진
  */
 export const OUTFIT_CATALOG: CuratedOutfit[] = [
   // ==========================================
-  // 1. 혹한기 (0℃ 미만) - 패딩, 헤비코트, 보온용품
+  // 1. 혹한기 (0℃ 미만) - 패딩, 니트, 기모팬츠, 방한화
   // ==========================================
   {
     id: "outfit-subzero-casual-1",
@@ -31,11 +34,53 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     style: "casual",
     styleName: "캐주얼",
     title: "헤비 숏패딩 & 와이드 데님",
-    clothingItems: "볼륨 숏패딩 + 두꺼운 터틀넥 니트 + 와이드 기모 데님 + 방한 스니커즈",
-    description: "영하의 칼바람을 막아주는 숏패딩과 터틀넥으로 보온성과 트렌디함을 챙긴 캐주얼 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=800&auto=format&fit=crop&q=80",
+    clothingItems: "블랙 숏패딩 + 차콜 반집업 니트 + 연청 와이드 데님 + 방한 슬립온",
+    description: "영하의 칼바람을 막아주는 볼륨 패딩과 포근한 반집업 니트, 여유로운 와이드 데님 조합입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1544923246-77307dd654cb?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
     situationTags: ["데일리", "데이트", "친구 모임"],
+    productItems: [
+      {
+        id: "subzero-cas-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "블랙 볼륨 숏패딩",
+        photoUrl: "https://images.unsplash.com/photo-1544923246-77307dd654cb?w=600&auto=format&fit=crop&q=80",
+        material: "덕다운 80/20, 방풍 나일론",
+        thickness: "두꺼움 (헤비)",
+        description: "찬 공기를 완벽 차단하는 고보온성 숏다운 점퍼",
+      },
+      {
+        id: "subzero-cas-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "차콜 반집업 울 니트",
+        photoUrl: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=600&auto=format&fit=crop&q=80",
+        material: "메리노울 80%, 나일론 20%",
+        thickness: "도톰한 두께감",
+        description: "목을 감싸 체온을 지켜주는 클래식 하프집업 니트",
+      },
+      {
+        id: "subzero-cas-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "연청 와이드 기모 데님",
+        photoUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100% (속기모)",
+        thickness: "두꺼움",
+        description: "체형을 편안하게 커버하는 와이드 스트레이트 진",
+      },
+      {
+        id: "subzero-cas-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "블랙 웜 패딩 슬립온",
+        photoUrl: "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=600&auto=format&fit=crop&q=80",
+        material: "신슐레이트 충전재, 미끄럼방지 고무창",
+        thickness: "방한용",
+        description: "발끝까지 시렵지 않은 따뜻한 패딩 방한 슈즈",
+      },
+    ],
   },
   {
     id: "outfit-subzero-formal-1",
@@ -44,11 +89,53 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     style: "formal",
     styleName: "단정한 스타일",
     title: "헤비 울 롱코트 & 캐시미어 니트",
-    clothingItems: "두꺼운 울 롱코트 + 캐시미어 니트 + 기모 슬랙스 + 가죽 첼시부츠",
-    description: "영하 날씨의 격식 있는 자리나 출근길에 어울리는 포근하고 신뢰감을 주는 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1544441893-675973e31985?w=800&auto=format&fit=crop&q=80",
+    clothingItems: "다크네이비 울 롱코트 + 크림 터틀넥 니트 + 차콜 기모 슬랙스 + 레더 첼시부츠",
+    description: "영하 날씨의 출근길과 비즈니스 미팅에 신뢰감을 주는 따뜻하고 단정한 실루엣입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1539533018447-63fcce667883?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
     situationTags: ["면접", "출근", "비즈니스", "결혼식"],
+    productItems: [
+      {
+        id: "subzero-form-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "다크네이비 캐시미어 코트",
+        photoUrl: "https://images.unsplash.com/photo-1539533018447-63fcce667883?w=600&auto=format&fit=crop&q=80",
+        material: "울 90%, 캐시미어 10%",
+        thickness: "두꺼움",
+        description: "단단하게 떨어지는 실루엣의 더블 브레스티드 코트",
+      },
+      {
+        id: "subzero-form-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "크림 화이트 터틀넥",
+        photoUrl: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&auto=format&fit=crop&q=80",
+        material: "파인 울 100%",
+        thickness: "보통",
+        description: "코트 이너로 가장 깔끔한 베이직 목폴라",
+      },
+      {
+        id: "subzero-form-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "차콜 프레스 슬랙스",
+        photoUrl: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=600&auto=format&fit=crop&q=80",
+        material: "울 혼방 (미세 기모)",
+        thickness: "보통",
+        description: "주름 걱정 없는 깔끔한 테이퍼드 핏 슬랙스",
+      },
+      {
+        id: "subzero-form-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "블랙 클래식 더비슈즈",
+        photoUrl: "https://images.unsplash.com/photo-1614252369475-531eba835eb1?w=600&auto=format&fit=crop&q=80",
+        material: "소가죽",
+        thickness: "사계절",
+        description: "단정하고 신뢰감 있는 가죽 드레스 슈즈",
+      },
+    ],
   },
   {
     id: "outfit-subzero-comfort-1",
@@ -57,15 +144,57 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     style: "comfort",
     styleName: "편한 스타일",
     title: "롱 벤치다운 & 기모 조거팬츠",
-    clothingItems: "롱 벤치다운 패딩 + 기모 후드티 + 스웨트 조거팬츠 + 털모자(비니)",
-    description: "체온을 머리부터 발끝까지 감싸주어 추운 날 장시간 야외 이동이나 산책에 가장 편안한 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1520006403909-838d6b92c22e?w=800&auto=format&fit=crop&q=80",
+    clothingItems: "롱 벤치다운 패딩 + 헤비 기모 후드티 + 블랙 스웨트 조거팬츠 + 쿠션 러닝화",
+    description: "머리부터 발끝까지 찬바람을 완벽 차단해 편안한 야외 활동이나 산책에 제격입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
     situationTags: ["운동", "산책", "원마일웨어", "장보기"],
+    productItems: [
+      {
+        id: "subzero-com-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "블랙 롱 벤치 파카",
+        photoUrl: "https://images.unsplash.com/photo-1544923246-77307dd654cb?w=600&auto=format&fit=crop&q=80",
+        material: "헤비 덕다운 충전재",
+        thickness: "두꺼움",
+        description: "무릎 아래까지 보온하는 최적의 방한 롱다운",
+      },
+      {
+        id: "subzero-com-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "멜란지 그레이 기모 후디",
+        photoUrl: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100% 텐타덤블",
+        thickness: "두꺼움",
+        description: "편안한 드롭숄더 오버핏 기모 후드티",
+      },
+      {
+        id: "subzero-com-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "블랙 스웨트 조거팬츠",
+        photoUrl: "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100% (속기모)",
+        thickness: "두꺼움",
+        description: "발목을 탄탄하게 잡아주는 벌룬 조거팬츠",
+      },
+      {
+        id: "subzero-com-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "그레이 쿠셔닝 스니커즈",
+        photoUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80",
+        material: "메쉬 & 스웨이드",
+        thickness: "보통",
+        description: "오래 걸어도 발이 편안한 충격 흡수 러닝화",
+      },
+    ],
   },
 
   // ==========================================
-  // 2. 초겨울 (0℃ 이상, 5℃ 미만) - 숏패딩, 도톰한 코트, 니트
+  // 2. 초겨울 (0℃ 이상, 5℃ 미만) - 숏패딩, 울코트, 니트
   // ==========================================
   {
     id: "outfit-winter-casual-1",
@@ -74,11 +203,53 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     style: "casual",
     styleName: "캐주얼",
     title: "퀼팅 점퍼 & 케이블 니트",
-    clothingItems: "퀼팅 다운 점퍼 + 도톰한 케이블 니트 + 스트레이트 진 + 가죽 슈즈",
-    description: "쌀쌀한 겨울 초입에 가볍고 따뜻하게 입을 수 있는 깔끔한 데일리 캐주얼 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&auto=format&fit=crop&q=80",
+    clothingItems: "카키 퀼팅 점퍼 + 크림 케이블 니트 + 중청 스트레이트 진 + 가죽 스니커즈",
+    description: "초겨울 쌀쌀한 기온에 딱 맞는 가볍고 포근한 데일리 캐주얼 조합입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["데일리", "약속", "카페"],
+    situationTags: ["데일리", "약속", "데이트", "소개팅", "카페"],
+    productItems: [
+      {
+        id: "winter-cas-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "카키 다이아 퀼팅 점퍼",
+        photoUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
+        material: "3온스 하스솜 압축 충전",
+        thickness: "보통",
+        description: "가볍고 보온성이 뛰어난 퀼팅 자켓",
+      },
+      {
+        id: "winter-cas-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "크림 베이지 케이블 니트",
+        photoUrl: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&auto=format&fit=crop&q=80",
+        material: "울 100%",
+        thickness: "도톰함",
+        description: "입체적인 꽈배기 짜임의 포근한 라운드 니트",
+      },
+      {
+        id: "winter-cas-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "중청 스트레이트 데님",
+        photoUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 99%, 엘라 1%",
+        thickness: "보통",
+        description: "어떤 상의와도 매치하기 좋은 기본 일자 청바지",
+      },
+      {
+        id: "winter-cas-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "화이트 클린 레더 스니커즈",
+        photoUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80",
+        material: "소가죽",
+        thickness: "보통",
+        description: "군더더기 없는 미니멀 화이트 스니커즈",
+      },
+    ],
   },
   {
     id: "outfit-winter-formal-1",
@@ -86,12 +257,54 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     tempMax: 5,
     style: "formal",
     styleName: "단정한 스타일",
-    title: "핸드메이드 싱글 코트 & 모크넥",
-    clothingItems: "핸드메이드 울 코트 + 모크넥 니트 + 테이퍼드 슬랙스 + 로퍼",
-    description: "차가운 공기 속에서도 실루엣을 정돈해 주는 단정하고 모던한 미팅/오피스 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=800&auto=format&fit=crop&q=80",
+    title: "싱글 울 코트 & 모크넥 니트",
+    clothingItems: "오트밀 싱글 코트 + 블랙 모크넥 니트 + 다크그레이 슬랙스 + 로퍼",
+    description: "단정하면서도 세련된 인상을 주는 미팅 및 출근용 코트 스타일링입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
     situationTags: ["면접", "출근", "회의", "격식있는 자리"],
+    productItems: [
+      {
+        id: "winter-form-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "오트밀 싱글 울 코트",
+        photoUrl: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&auto=format&fit=crop&q=80",
+        material: "울 85%, 나일론 15%",
+        thickness: "도톰함",
+        description: "군더더기 없는 테일러드 칼라 싱글 코트",
+      },
+      {
+        id: "winter-form-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "블랙 하프 모크넥 니트",
+        photoUrl: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=600&auto=format&fit=crop&q=80",
+        material: "캐시미어 블렌드",
+        thickness: "보통",
+        description: "목선을 부드럽게 감싸는 미니멀 모크넥",
+      },
+      {
+        id: "winter-form-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "다크그레이 세미와이드 슬랙스",
+        photoUrl: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=600&auto=format&fit=crop&q=80",
+        material: "TR 원단",
+        thickness: "보통",
+        description: "구김이 적고 찰랑이는 세미와이드 슬랙스",
+      },
+      {
+        id: "winter-form-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "블랙 페니 로퍼",
+        photoUrl: "https://images.unsplash.com/photo-1614252369475-531eba835eb1?w=600&auto=format&fit=crop&q=80",
+        material: "카프스킨 소가죽",
+        thickness: "보통",
+        description: "단정함을 완성하는 클래식 페니 로퍼",
+      },
+    ],
   },
   {
     id: "outfit-winter-comfort-1",
@@ -99,280 +312,366 @@ export const OUTFIT_CATALOG: CuratedOutfit[] = [
     tempMax: 5,
     style: "comfort",
     styleName: "편한 스타일",
-    title: "보아 플리스 자켓 & 스웨트팬츠",
-    clothingItems: "도톰한 보아 플리스 집업 + 기모 맨투맨 + 이지 밴딩 팬츠 + 쿠션 스니커즈",
-    description: "가벼운 착용감과 포근한 보온성으로 편안하게 외출할 수 있는 이지웨어입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800&auto=format&fit=crop&q=80",
+    title: "보아 후리스 자켓 & 조거팬츠",
+    clothingItems: "아이보리 보아 후리스 + 오트밀 맨투맨 + 차콜 조거팬츠 + 캔버스화",
+    description: "부드러운 양털 후리스와 신축성 좋은 조거팬츠로 활동성을 극대화한 코디입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["산책", "운동", "주말 외출"],
+    situationTags: ["주말", "동네", "산책", "카페"],
+    productItems: [
+      {
+        id: "winter-com-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "아이보리 덤블 플리스 자켓",
+        photoUrl: "https://images.unsplash.com/photo-1544923246-77307dd654cb?w=600&auto=format&fit=crop&q=80",
+        material: "헤비 쉐르파 플리스",
+        thickness: "도톰함",
+        description: "부드러운 촉감과 방풍 안감의 집업 플리스",
+      },
+      {
+        id: "winter-com-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "오트밀 헤비 코튼 맨투맨",
+        photoUrl: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "보통",
+        description: "탄탄한 넥라인의 베이직 스웨트셔츠",
+      },
+      {
+        id: "winter-com-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "차콜 기모 조거팬츠",
+        photoUrl: "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=600&auto=format&fit=crop&q=80",
+        material: "면/폴리 혼방",
+        thickness: "도톰함",
+        description: "무릎 발사가 적은 밴딩 조거팬츠",
+      },
+      {
+        id: "winter-com-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "블랙 로우탑 스니커즈",
+        photoUrl: "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=600&auto=format&fit=crop&q=80",
+        material: "캔버스 & 러버솔",
+        thickness: "보통",
+        description: "가볍고 편안한 기본 스니커즈",
+      },
+    ],
   },
 
   // ==========================================
-  // 3. 늦가을/초겨울 (5℃ 이상, 10℃ 미만) - 코트, 울자켓, 가디건
+  // 3. 늦가을 / 초봄 (5℃ 이상, 10℃ 미만) - 트렌치, 자켓, 가디건
   // ==========================================
   {
-    id: "outfit-lateautumn-casual-1",
+    id: "outfit-fall-casual-1",
     tempMin: 5,
     tempMax: 10,
     style: "casual",
     styleName: "캐주얼",
-    title: "울 블레이저 & 라운드 니트",
-    clothingItems: "도톰한 울 블레이저 + 라운드 니트 + 크롭 데님 팬츠 + 스니커즈",
-    description: "5~9℃ 사이 쌀쌀한 날씨에 멋스러움과 체온을 동시에 지켜주는 레이어드 캐주얼 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=80",
+    title: "바시티 자켓 & 와이드 치노",
+    clothingItems: "네이비 바시티 자켓 + 그레이 스트라이프 롱슬리브 + 베이지 와이드 치노 + 독일군 스니커즈",
+    description: "활동적인 캐주얼 무드를 연출하기 좋은 가을/봄 대표 조합입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["데이트", "쇼핑", "주말"],
+    situationTags: ["데이트", "대학생", "외출"],
+    productItems: [
+      {
+        id: "fall-cas-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "네이비 울 바시티 자켓",
+        photoUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
+        material: "멜톤 울 & 레더 배색",
+        thickness: "보통",
+        description: "트렌디한 실루엣의 스타디움 점퍼",
+      },
+      {
+        id: "fall-cas-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "그레이 보트넥 롱슬리브",
+        photoUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "보통",
+        description: "단품이나 이너로 포인트 주기 좋은 긴팔 티셔츠",
+      },
+      {
+        id: "fall-cas-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "베이지 원턱 와이드 치노",
+        photoUrl: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100% 트윌",
+        thickness: "보통",
+        description: "자연스러운 핏감의 코튼 와이드 팬츠",
+      },
+      {
+        id: "fall-cas-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "화이트/그레이 저먼 아미 트레이너",
+        photoUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80",
+        material: "소가죽 & 스웨이드 토",
+        thickness: "보통",
+        description: "클래식하고 미니멀한 독일군 스니커즈",
+      },
+    ],
   },
   {
-    id: "outfit-lateautumn-formal-1",
+    id: "outfit-fall-formal-1",
     tempMin: 5,
     tempMax: 10,
     style: "formal",
     styleName: "단정한 스타일",
-    title: "클래식 트렌치 울 코트 & 셔츠",
-    clothingItems: "울 트렌치코트 + 드레스 셔츠 + 브이넥 니트 조끼 + 슬랙스",
-    description: "출퇴근길 찬 바람을 막아주고 실내에서는 가볍게 활동할 수 있는 클래식한 오피스 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?w=800&auto=format&fit=crop&q=80",
+    title: "베이지 트렌치코트 & 셔츠 레이어드",
+    clothingItems: "클래식 더블 트렌치코트 + 네이비 브이넥 니트 + 화이트 셔츠 + 블랙 슬랙스",
+    description: "도시적인 무드와 보온성을 모두 갖춘 비즈니스 캐주얼의 정석입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["면접", "출근", "미팅"],
-  },
-  {
-    id: "outfit-lateautumn-comfort-1",
-    tempMin: 5,
-    tempMax: 10,
-    style: "comfort",
-    styleName: "편한 스타일",
-    title: "바시티 점퍼 & 후드집업",
-    clothingItems: "울 바시티 자켓 + 후드집업 + 와이드 카고팬츠 + 볼캡",
-    description: "적당한 두께감의 자켓과 후드로 스포티하면서도 보온성을 챙긴 스트리트 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["캠퍼스", "캐주얼 약속", "여행"],
-  },
-
-  // ==========================================
-  // 4. 봄/가을 (10℃ 이상, 15℃ 미만) - 자켓, 가죽자켓, 가디건
-  // ==========================================
-  {
-    id: "outfit-autumn-casual-1",
-    tempMin: 10,
-    tempMax: 15,
-    style: "casual",
-    styleName: "캐주얼",
-    title: "라이더 자켓 & 스트라이프 티",
-    clothingItems: "비건 레더 라이더 자켓 + 스트라이프 롱슬리브 + 블랙 진 + 더비 슈즈",
-    description: "선선한 10~14℃ 기온에 바람을 막아주고 세련된 무드를 연출할 수 있는 자켓 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1508427953056-b00b8d78ebf5?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["데이트", "나들이", "주말"],
-  },
-  {
-    id: "outfit-autumn-formal-1",
-    tempMin: 10,
-    tempMax: 15,
-    style: "formal",
-    styleName: "단정한 스타일",
-    title: "테일러드 자켓 & 코튼 셔츠",
-    clothingItems: "모던 테일러드 자켓 + 옥스포드 코튼 셔츠 + 스트레이트 슬랙스 + 가죽 시계",
-    description: "격식 있는 일정이나 면접, 미팅에 가장 안정적인 깔끔하고 신뢰감을 주는 스타일링입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["면접", "출근", "발표", "하객룩"],
-  },
-  {
-    id: "outfit-autumn-comfort-1",
-    tempMin: 10,
-    tempMax: 15,
-    style: "comfort",
-    styleName: "편한 스타일",
-    title: "데님 트러커 자켓 & 코튼 치노",
-    clothingItems: "클래식 데님 자켓 + 베이직 티셔츠 + 루즈핏 치노 팬츠 + 캔버스화",
-    description: "활동성이 뛰어나 야외 나들이나 가벼운 산책에 제격인 편안한 데님 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["야외활동", "여행", "일상"],
+    situationTags: ["출근", "비즈니스", "미팅"],
+    productItems: [
+      {
+        id: "fall-form-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "클래식 더블 트렌치코트",
+        photoUrl: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&auto=format&fit=crop&q=80",
+        material: "방수 코튼 개버딘",
+        thickness: "보통",
+        description: "바람을 막아주는 탄탄한 개버딘 트렌치",
+      },
+      {
+        id: "fall-form-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "네이비 파인 울 브이넥 니트",
+        photoUrl: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=600&auto=format&fit=crop&q=80",
+        material: "메리노울 100%",
+        thickness: "보통",
+        description: "셔츠와 찰떡궁합인 브이넥 니트",
+      },
+      {
+        id: "fall-form-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "블랙 테이퍼드 슬랙스",
+        photoUrl: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=600&auto=format&fit=crop&q=80",
+        material: "폴리/레이온/스판",
+        thickness: "보통",
+        description: "다리가 길어 보이는 깔끔한 라인의 슬랙스",
+      },
+      {
+        id: "fall-form-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "다크브라운 태슬 로퍼",
+        photoUrl: "https://images.unsplash.com/photo-1614252369475-531eba835eb1?w=600&auto=format&fit=crop&q=80",
+        material: "소가죽",
+        thickness: "보통",
+        description: "고급스러운 태슬 디테일의 드레스 슈즈",
+      },
+    ],
   },
 
   // ==========================================
-  // 5. 따뜻한 봄/가을 (15℃ 이상, 20℃ 미만) - 셔츠, 맨투맨, 가디건
+  // 4. 온화한 봄/가을 (10℃ ~ 20℃)
   // ==========================================
   {
-    id: "outfit-spring-casual-1",
-    tempMin: 15,
+    id: "outfit-mild-casual-1",
+    tempMin: 10,
     tempMax: 20,
     style: "casual",
     styleName: "캐주얼",
-    title: "오버핏 맨투맨 & 세미와이드 슬랙스",
-    clothingItems: "헤비코튼 오버핏 맨투맨 + 이너 화이트 티 레이어드 + 세미와이드 슬랙스 + 스니커즈",
-    description: "15~19℃ 일교차 있는 날씨에 단독으로 입기 좋고 호불호 없는 트렌디한 데일리 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1550614000-4895a10e1bfd?w=800&auto=format&fit=crop&q=80",
+    title: "오버핏 블레이저 & 크롭 데님",
+    clothingItems: "차콜 싱글 블레이저 + 화이트 반팔 티 + 연청 크롭 데님 + 캔버스 스니커즈",
+    description: "낮에는 쾌적하고 아침저녁 쌀쌀함은 블레이저로 단정하게 커버하는 스마트 캐주얼 룩입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["데일리", "데이트", "약속"],
+    situationTags: ["데이트", "약속", "주말"],
+    productItems: [
+      {
+        id: "mild-cas-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "차콜 세미오버 블레이저",
+        photoUrl: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&auto=format&fit=crop&q=80",
+        material: "폴리/레이온 혼방",
+        thickness: "얇음~보통",
+        description: "캐주얼과 포멀을 넘나드는 모던 자켓",
+      },
+      {
+        id: "mild-cas-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "화이트 20수 코튼 티셔츠",
+        photoUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "얇음",
+        description: "비침 없는 탄탄한 프리미엄 기본 반팔티",
+      },
+      {
+        id: "mild-cas-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "연청 테이퍼드 크롭 진",
+        photoUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "보통",
+        description: "발목이 살짝 드러나는 경쾌한 기장의 데님",
+      },
+      {
+        id: "mild-cas-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "화이트 캔버스 스니커즈",
+        photoUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80",
+        material: "캔버스",
+        thickness: "얇음",
+        description: "사계절 어디에나 매칭되는 클래식 스니커즈",
+      },
+    ],
   },
   {
-    id: "outfit-spring-formal-1",
-    tempMin: 15,
-    tempMax: 20,
-    style: "formal",
-    styleName: "단정한 스타일",
-    title: "오픈카라 셔츠 & 슬림 치노",
-    clothingItems: "오픈카라 긴소매 셔츠 + 테이퍼드 치노 팬츠 + 가죽 벨트 + 페니 로퍼",
-    description: "가볍고 단정한 인상을 주며, 실내외 온도 변화에 유연하게 대응하는 스마트 비즈니스 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1516762689617-e1cffcef479d?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["면접", "출근", "미팅"],
-  },
-  {
-    id: "outfit-spring-comfort-1",
-    tempMin: 15,
+    id: "outfit-mild-comfort-1",
+    tempMin: 10,
     tempMax: 20,
     style: "comfort",
     styleName: "편한 스타일",
-    title: "경량 바람막이 & 나일론 조거",
-    clothingItems: "경량 윈드브레이커 + 기능성 티셔츠 + 나일론 조거팬츠 + 러닝화",
-    description: "바람을 막아주고 가벼워 산책, 러닝, 가벼운 야외 활동에 최적화된 스포티 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=800&auto=format&fit=crop&q=80",
+    title: "집업 후드 & 스웨트 팬츠 셋업",
+    clothingItems: "그레이 2-way 집업 후드 + 화이트 레이어드 티 + 그레이 스웨트 팬츠 + 볼드 러닝화",
+    description: "온도 변화에 맞춰 지퍼를 조절할 수 있어 하루 종일 가장 편안한 원마일 셋업입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["운동", "조깅", "산책", "원마일웨어"],
+    situationTags: ["운동", "산책", "여행", "휴식"],
+    productItems: [
+      {
+        id: "mild-com-outer",
+        category: "outer",
+        categoryLabel: "외투",
+        name: "멜란지 그레이 투웨이 집업 후디",
+        photoUrl: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80",
+        material: "프렌치 테리 코튼 100%",
+        thickness: "보통",
+        description: "상하 지퍼로 다양한 연출이 가능한 후드 집업",
+      },
+      {
+        id: "mild-com-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "화이트 레이어드 롱슬리브",
+        photoUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "얇음",
+        description: "밑단 레이어드 연출에 좋은 베이직 티셔츠",
+      },
+      {
+        id: "mild-com-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "멜란지 그레이 와이드 스웨트 팬츠",
+        photoUrl: "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=600&auto=format&fit=crop&q=80",
+        material: "프렌치 테리 코튼 100%",
+        thickness: "보통",
+        description: "허리 스트링으로 편안한 와이드 트레이닝 바지",
+      },
+      {
+        id: "mild-com-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "올화이트 쿠셔닝 스니커즈",
+        photoUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80",
+        material: "합성가죽 & 고무",
+        thickness: "보통",
+        description: "푹신한 발걸음을 돕는 가벼운 러닝화",
+      },
+    ],
   },
 
   // ==========================================
-  // 6. 초여름 (20℃ 이상, 28℃ 미만) - 반팔, 린넨셔츠, 얇은 바지
+  // 5. 초여름 / 여름 (20℃ 이상)
   // ==========================================
   {
-    id: "outfit-earlysummer-casual-1",
+    id: "outfit-summer-casual-1",
     tempMin: 20,
-    tempMax: 28,
+    tempMax: 50,
     style: "casual",
     styleName: "캐주얼",
-    title: "린넨 셔츠 & 테이퍼드 데님",
-    clothingItems: "얇은 린넨 셔츠 + 이너 화이트 반팔티 + 라이트블루 데님 + 가벼운 슬립온",
-    description: "햇살은 따스하고 바람은 부는 초여름에 땀 흡수와 통기성을 갖춘 시원한 캐주얼 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?w=800&auto=format&fit=crop&q=80",
+    title: "린넨 반팔 셔츠 & 버뮤다 쇼츠",
+    clothingItems: "스카이블루 오픈카라 린넨 셔츠 + 화이트 이너티 + 네이비 버뮤다 팬츠 + 가죽 샌들",
+    description: "통기성이 뛰어난 린넨 소재로 무더위를 식혀주는 시원하고 트렌디한 서머 룩입니다.",
+    photoUrl: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=600&auto=format&fit=crop&q=80",
     photoCredit: "Unsplash / Free License",
-    situationTags: ["나들이", "데이트", "약속"],
-  },
-  {
-    id: "outfit-earlysummer-formal-1",
-    tempMin: 20,
-    tempMax: 28,
-    style: "formal",
-    styleName: "단정한 스타일",
-    title: "쿨 반소매 피케 셔츠 & 썸머 슬랙스",
-    clothingItems: "쿨에어 카라 반소매 니트 + 썸머 쿨링 슬랙스 + 미니멀 레더 스니커즈",
-    description: "따뜻한 기온에서도 단정함을 유지하며 쾌적하게 착용할 수 있는 쿨비즈 오피스 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1492707892479-7bc8d5a4ee93?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["출근", "미팅", "면접"],
-  },
-  {
-    id: "outfit-earlysummer-comfort-1",
-    tempMin: 20,
-    tempMax: 28,
-    style: "comfort",
-    styleName: "편한 스타일",
-    title: "오버핏 반팔티 & 코튼 쇼츠",
-    clothingItems: "루즈핏 코튼 반소매 + 무릎 길이 버뮤다 쇼츠 + 메쉬 캡 + 샌들",
-    description: "낮 기온이 오르는 초여름에 통풍이 잘되고 가벼워 활동량이 많은 날 제격인 편한 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["나들이", "주말", "휴식"],
-  },
-
-  // ==========================================
-  // 7. 한여름 (28℃ 이상) - 통풍, 린넨, 반바지
-  // ==========================================
-  {
-    id: "outfit-hot-casual-1",
-    tempMin: 28,
-    tempMax: 60,
-    style: "casual",
-    styleName: "캐주얼",
-    title: "오픈카라 린넨 반소매 & 쇼츠",
-    clothingItems: "오픈카라 린넨 반소매 + 린넨 블렌드 하프 팬츠 + 버켄 샌들",
-    description: "무더위와 높은 습도에도 끈적이지 않고 시원한 바람이 통하는 바캉스/데일리 코디입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["휴가", "주말", "데이트"],
-  },
-  {
-    id: "outfit-hot-formal-1",
-    tempMin: 28,
-    tempMax: 60,
-    style: "formal",
-    styleName: "단정한 스타일",
-    title: "울블렌드 린넨 반소매 & 쿨 슬랙스",
-    clothingItems: "고급 린넨 반소매 셔츠 + 기능성 쿨맥스 슬랙스 + 브라운 로퍼",
-    description: "한여름 폭염에도 격식과 예의를 지킬 수 있도록 통풍성과 깔끔함을 극대화한 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["출근", "면접", "비즈니스"],
-  },
-  {
-    id: "outfit-hot-comfort-1",
-    tempMin: 28,
-    tempMax: 60,
-    style: "comfort",
-    styleName: "편한 스타일",
-    title: "흡습속건 쿨링 티셔츠 & 나일론 이지 쇼츠",
-    clothingItems: "기능성 쿨링 라운드티 + 나일론 밴딩 쇼츠 + 슬라이드 샌들",
-    description: "무더운 날씨에 땀 배출이 빠르고 달라붙지 않아 장시간 쾌적함을 유지해 주는 룩입니다.",
-    photoUrl: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800&auto=format&fit=crop&q=80",
-    photoCredit: "Unsplash / Free License",
-    situationTags: ["운동", "산책", "원마일웨어"],
+    situationTags: ["주말", "바캉스", "데이트", "더운 날"],
+    productItems: [
+      {
+        id: "summer-cas-top",
+        category: "top",
+        categoryLabel: "상의",
+        name: "스카이블루 오픈카라 린넨 셔츠",
+        photoUrl: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=600&auto=format&fit=crop&q=80",
+        material: "프렌치 린넨 100%",
+        thickness: "얇음",
+        description: "목선이 시원하게 열린 여름용 린넨 반팔 셔츠",
+      },
+      {
+        id: "summer-cas-bottom",
+        category: "bottom",
+        categoryLabel: "하의",
+        name: "네이비 원턱 버뮤다 쇼츠",
+        photoUrl: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=600&auto=format&fit=crop&q=80",
+        material: "코튼 100%",
+        thickness: "얇음",
+        description: "무릎까지 내려오는 단정한 버뮤다 반바지",
+      },
+      {
+        id: "summer-cas-shoes",
+        category: "shoes",
+        categoryLabel: "신발",
+        name: "블랙 가죽 슬라이드 샌들",
+        photoUrl: "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=600&auto=format&fit=crop&q=80",
+        material: "천연 소가죽 스트랩",
+        thickness: "여름용",
+        description: "시원하면서도 발이 편안한 미니멀 가죽 샌들",
+      },
+    ],
   },
 ]
 
 /**
- * 기온 및 상황에 따라 매칭되는 코디 후보군을 조회합니다.
- * - 사용자 상황(면접/출근 -> formal 우선, 운동/산책 -> comfort 우선, 데이트/약속 -> casual 우선)
- * - 강수 여부(비/눈) 고려
- * - 캐주얼, 단정한 스타일, 편한 스타일이 고루 포함되도록 구성
+ * 기온에 따른 코디 추천 검색 함수
  */
 export function getOutfitRecommendations(
   temperature: number,
   situation?: string | null,
-  preferredStyle?: OutfitStyle | "all",
-): {
-  primary: CuratedOutfit
-  alternatives: CuratedOutfit[]
-  allForTemp: CuratedOutfit[]
-} {
-  // 기온에 맞는 후보군 필터링
-  const tempMatches = OUTFIT_CATALOG.filter(
-    (item) => temperature >= item.tempMin && temperature < item.tempMax,
+  preferredStyle?: OutfitStyle | null,
+): { primary: CuratedOutfit; alternatives: CuratedOutfit[]; allForTemp: CuratedOutfit[] } {
+  // 기온 범위에 맞는 후보들 필터링
+  const candidates = OUTFIT_CATALOG.filter(
+    (o) => temperature >= o.tempMin && temperature < o.tempMax,
   )
 
-  const candidates = tempMatches.length > 0 ? tempMatches : OUTFIT_CATALOG
+  const available = candidates.length > 0 ? candidates : OUTFIT_CATALOG
 
-  // 상황 키워드 분석
-  const sit = (situation || "").toLowerCase()
-  let targetStyle: OutfitStyle = "casual"
-
-  if (sit.includes("면접") || sit.includes("출근") || sit.includes("회의") || sit.includes("결혼") || sit.includes("격식") || sit.includes("단정")) {
-    targetStyle = "formal"
-  } else if (sit.includes("운동") || sit.includes("러닝") || sit.includes("산책") || sit.includes("조깅") || sit.includes("편한") || sit.includes("집앞")) {
-    targetStyle = "comfort"
-  } else if (sit.includes("데이트") || sit.includes("소개팅") || sit.includes("약속") || sit.includes("쇼핑")) {
-    targetStyle = "casual"
+  let primary = available[0]
+  if (preferredStyle) {
+    const styleMatched = available.find((o) => o.style === preferredStyle)
+    if (styleMatched) primary = styleMatched
+  } else if (situation) {
+    const sitLower = situation.toLowerCase()
+    const matched = available.find((o) =>
+      o.situationTags?.some((tag) => sitLower.includes(tag.toLowerCase())),
+    )
+    if (matched) primary = matched
   }
 
-  // 선호 스타일이 명시된 경우 우선 적용
-  if (preferredStyle && preferredStyle !== "all") {
-    targetStyle = preferredStyle
-  }
-
-  // 타겟 스타일에 맞는 대표 코디 선정
-  const primaryMatch =
-    candidates.find((item) => item.style === targetStyle) ||
-    candidates[0]
-
-  // 나머지 스타일 코디들 (다양성 제공)
-  const alternatives = candidates.filter((item) => item.id !== primaryMatch.id)
+  const alternatives = available.filter((o) => o.id !== primary.id)
 
   return {
-    primary: primaryMatch,
+    primary,
     alternatives,
-    allForTemp: candidates,
+    allForTemp: available,
   }
 }

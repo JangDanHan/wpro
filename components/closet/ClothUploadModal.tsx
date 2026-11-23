@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
   ClosetItem,
   ClothingCategory,
@@ -12,7 +12,11 @@ import {
   ThicknessLevel,
   WarmthLevel,
 } from "@/lib/domain/closet-types"
-import { processAndResizeImage } from "@/lib/utils/image-processing"
+import {
+  cleanAndFormatProductImage,
+  processAndResizeImage,
+  NormalizedCropBox,
+} from "@/lib/utils/image-processing"
 import {
   X,
   Camera,
@@ -23,7 +27,10 @@ import {
   AlertCircle,
   HelpCircle,
   Layers,
-  Image as ImageIcon,
+  Crop,
+  RotateCcw,
+  Sliders,
+  Check,
 } from "lucide-react"
 
 interface ClothUploadModalProps {
@@ -36,9 +43,8 @@ interface PendingItem {
   id: string
   file: File
   originalUrl: string
-  noBgUrl: string
+  cleanedUrl: string // 쇼핑몰 UI 및 배경이 정리된 스튜디오 상품 이미지
   status: "pending" | "processing" | "analyzed" | "error"
-  // 편집 가능한 폼 상태
   name: string
   category: ClothingCategory
   subCategory: string
@@ -50,7 +56,8 @@ interface PendingItem {
   thickness: ThicknessLevel
   warmth: WarmthLevel
   isMaterialInferred: boolean
-  activeImageMode: "original" | "nobg"
+  activeView: "cleaned" | "original"
+  cropBox: NormalizedCropBox
   confidenceNotes: string
 }
 
@@ -59,9 +66,29 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isProcessingBatch, setIsProcessingBatch] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isManualCropMode, setIsManualCropMode] = useState(false)
+
+  // 수동 크롭 조절용 슬라이더 상태 (0 ~ 1000)
+  const [cropYMin, setCropYMin] = useState(20)
+  const [cropYMax, setCropYMax] = useState(865)
+  const [cropXMin, setCropXMin] = useState(20)
+  const [cropXMax, setCropXMax] = useState(980)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  const currentItem = pendingQueue[currentIndex]
+
+  // 현재 아이템 변경 시 크롭 박스 동기화
+  useEffect(() => {
+    if (currentItem) {
+      setCropYMin(currentItem.cropBox.ymin)
+      setCropYMax(currentItem.cropBox.ymax)
+      setCropXMin(currentItem.cropBox.xmin)
+      setCropXMax(currentItem.cropBox.xmax)
+      setIsManualCropMode(false)
+    }
+  }, [currentIndex, currentItem?.id])
 
   if (!isOpen) return null
 
@@ -77,13 +104,14 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       try {
-        const { originalDataUrl, noBgDataUrl } = await processAndResizeImage(file)
+        const defaultBox: NormalizedCropBox = { ymin: 20, xmin: 20, ymax: 865, xmax: 980 }
+        const { originalDataUrl, noBgDataUrl } = await processAndResizeImage(file, defaultBox)
 
         const pending: PendingItem = {
           id: `cloth_${Date.now()}_${i}`,
           file,
           originalUrl: originalDataUrl,
-          noBgUrl: noBgDataUrl,
+          cleanedUrl: noBgDataUrl,
           status: "processing",
           name: file.name.replace(/\.[^/.]+$/, "").slice(0, 30),
           category: "top",
@@ -96,8 +124,9 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
           thickness: "medium",
           warmth: "medium",
           isMaterialInferred: true,
-          activeImageMode: "nobg",
-          confidenceNotes: "AI 분석을 시작합니다...",
+          activeView: "cleaned",
+          cropBox: defaultBox,
+          confidenceNotes: "쇼핑몰 UI 및 배경을 자동 분리 중입니다...",
         }
         newPendingItems.push(pending)
       } catch (err) {
@@ -108,11 +137,11 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
     setPendingQueue((prev) => [...prev, ...newPendingItems])
     setIsProcessingBatch(false)
 
-    // 순차적으로 AI 분석 API 호출
+    // 순차적으로 AI 분석 및 스마트 크롭 실행
     processAnalysisQueue(newPendingItems)
   }
 
-  // AI 분석 순차 실행
+  // AI 분석 및 크롭 박스 적용
   const processAnalysisQueue = async (items: PendingItem[]) => {
     for (const item of items) {
       try {
@@ -129,12 +158,24 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
         const data = await res.json()
         const analysis = data.analysis
 
+        // AI가 제안한 크롭 박스가 있으면 캔버스 재처리
+        let updatedCleanedUrl = item.cleanedUrl
+        const suggestedBox = analysis.cropBox || item.cropBox
+        if (analysis.cropBox) {
+          try {
+            const reprocessed = await cleanAndFormatProductImage(item.originalUrl, suggestedBox)
+            updatedCleanedUrl = reprocessed.cleanedDataUrl
+          } catch {}
+        }
+
         setPendingQueue((prev) =>
           prev.map((p) => {
             if (p.id !== item.id) return p
             return {
               ...p,
               status: "analyzed",
+              cleanedUrl: updatedCleanedUrl,
+              cropBox: suggestedBox,
               name: analysis.name || p.name,
               category: analysis.category || p.category,
               subCategory: analysis.subCategory || "",
@@ -146,19 +187,18 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
               thickness: analysis.thickness || p.thickness,
               warmth: analysis.warmth || p.warmth,
               isMaterialInferred: analysis.isMaterialInferred ?? true,
-              confidenceNotes: analysis.confidenceNotes || "분석 완료",
+              confidenceNotes: analysis.confidenceNotes || "상품 분리 완료",
             }
           }),
         )
-      } catch (error) {
-        // 분석 실패 시에도 수동 입력 가능하도록 상태 변경
+      } catch {
         setPendingQueue((prev) =>
           prev.map((p) => {
             if (p.id !== item.id) return p
             return {
               ...p,
               status: "error",
-              confidenceNotes: "AI 자동 분석에 실패했습니다. 직접 정보를 입력해주세요.",
+              confidenceNotes: "자동 영역 인식이 원활하지 않습니다. 직접 영역을 수정하거나 정보를 입력해주세요.",
             }
           }),
         )
@@ -166,16 +206,41 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
     }
   }
 
-  const currentItem = pendingQueue[currentIndex]
+  // 수동 크롭 적용 핸들러
+  const handleApplyManualCrop = async () => {
+    if (!currentItem) return
+    const customBox: NormalizedCropBox = {
+      ymin: Math.min(cropYMin, cropYMax - 50),
+      ymax: Math.max(cropYMax, cropYMin + 50),
+      xmin: Math.min(cropXMin, cropXMax - 50),
+      xmax: Math.max(cropXMax, cropXMin + 50),
+    }
 
-  // 현재 아이템 필드 변경 핸들러
+    try {
+      const { cleanedDataUrl } = await cleanAndFormatProductImage(
+        currentItem.originalUrl,
+        customBox,
+      )
+      setPendingQueue((prev) =>
+        prev.map((p, idx) =>
+          idx === currentIndex
+            ? { ...p, cleanedUrl: cleanedDataUrl, cropBox: customBox, activeView: "cleaned" }
+            : p,
+        ),
+      )
+      setIsManualCropMode(false)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const updateCurrentItem = (updates: Partial<PendingItem>) => {
     setPendingQueue((prev) =>
       prev.map((p, idx) => (idx === currentIndex ? { ...p, ...updates } : p)),
     )
   }
 
-  // 저장 및 다음 아이템으로 이동
+  // 최종 저장
   const handleSaveCurrentItem = async () => {
     if (!currentItem) return
     setIsSaving(true)
@@ -194,10 +259,11 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
         material: currentItem.material.trim() || undefined,
         thickness: currentItem.thickness,
         warmth: currentItem.warmth,
-        isAttributeConfirmed: true, // 사용자가 확인 후 저장함
+        isAttributeConfirmed: true,
+        // 정리된 상품 사진을 기본으로 사용, 원본 사진도 별도 보관
         originalImageUrl: currentItem.originalUrl,
-        noBgImageUrl: currentItem.noBgUrl,
-        activeImageMode: currentItem.activeImageMode,
+        noBgImageUrl: currentItem.cleanedUrl,
+        activeImageMode: "nobg", // 항상 정돈된 스튜디오 상품 이미지 모드
         isFavorite: false,
         wearCount: 0,
         lastWornDate: null,
@@ -207,7 +273,6 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
 
       await onSaveItem(closetItem)
 
-      // 대기 큐에서 제거
       const nextQueue = pendingQueue.filter((_, idx) => idx !== currentIndex)
       setPendingQueue(nextQueue)
       if (currentIndex >= nextQueue.length) {
@@ -234,7 +299,7 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-50">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* 모달 상단 헤더 */}
+        {/* 모달 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 rounded-xl">
@@ -242,25 +307,24 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                스마트 옷 등록
+                스마트 옷 등록 & 사진 자동 정리
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                사진을 올리면 AI가 배경을 지우고 속성을 분석해 드려요.
+                쇼핑몰 캡처나 촬영 사진의 주변 요소를 지우고 상품 사진으로 정돈해 드려요
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-zinc-600 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* 바디 영역 */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1">
-          {/* 1. 파일 선택 버튼들 (대기열 비어있을 때) */}
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
           {pendingQueue.length === 0 ? (
             <div className="space-y-4 py-6">
               <div className="grid grid-cols-2 gap-3">
@@ -275,7 +339,7 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                   <span className="text-sm font-bold text-sky-900 dark:text-sky-200">
                     카메라로 촬영
                   </span>
-                  <span className="text-[11px] text-zinc-500">지금 바로 찍어서 등록</span>
+                  <span className="text-[11px] text-zinc-500">방바닥/옷걸이 사진도 깔끔 정리</span>
                 </button>
 
                 <button
@@ -287,9 +351,9 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                     <Upload className="w-6 h-6" />
                   </div>
                   <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                    사진 보관함
+                    쇼핑몰 캡처 / 보관함
                   </span>
-                  <span className="text-[11px] text-zinc-500">여러 장 다중 선택 가능</span>
+                  <span className="text-[11px] text-zinc-500">하트·뱃지 자동 제외</span>
                 </button>
               </div>
 
@@ -310,19 +374,19 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                 onChange={(e) => handleFilesSelected(e.target.files)}
               />
 
-              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
+              <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl text-xs text-zinc-500 dark:text-zinc-400 space-y-1.5">
                 <div className="font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-sky-500" />
-                  <span>스마트 등록 팁</span>
+                  <span>스마트 사진 정돈 기능 안내</span>
                 </div>
-                <p>• 옷을 평평하게 펼치거나 옷걸이에 걸어 촬영하면 배경 제거가 더 깔끔합니다.</p>
-                <p>• 여러 장을 한 번에 올려도 하나씩 순서대로 확인하고 등록할 수 있습니다.</p>
+                <p>• 무신사 등 쇼핑몰 캡처에 붙은 하트 버튼, 컬러칩, 뱃지를 스마트하게 제외합니다.</p>
+                <p>• 옷 자체의 로고, 프린트, 자수, 고유 색상은 100% 그대로 보존합니다.</p>
+                <p>• 흰색/밝은 회색의 통일된 스튜디오 배경 중앙에 전체 상품이 잘리지 않게 배치됩니다.</p>
               </div>
             </div>
           ) : (
-            /* 2. 대기열 진행 상태 및 현재 옷 속성 편집 폼 */
             <div className="space-y-4">
-              {/* 다중 업로드 진행 바 */}
+              {/* 대기열 진행 상태 */}
               <div className="flex items-center justify-between p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl text-xs">
                 <span className="font-bold text-zinc-700 dark:text-zinc-300">
                   등록 대기열 ({currentIndex + 1} / {pendingQueue.length})
@@ -343,84 +407,158 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                 </div>
               </div>
 
-              {/* 이미지 미리보기 및 원본/배경 제거 탭 */}
-              <div className="relative rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800">
-                <div className="h-56 w-full flex items-center justify-center p-2">
+              {/* 이미지 뷰어 (정리된 이미지 vs 원본 사진 탭 & 수동 크롭 도구) */}
+              <div className="relative rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-[#f8fafc] dark:bg-zinc-800">
+                <div className="h-60 w-full flex items-center justify-center p-3 relative">
                   <img
                     src={
-                      currentItem?.activeImageMode === "nobg" && currentItem.noBgUrl
-                        ? currentItem.noBgUrl
+                      currentItem?.activeView === "cleaned"
+                        ? currentItem.cleanedUrl
                         : currentItem?.originalUrl
                     }
                     alt={currentItem?.name}
-                    className="max-h-full max-w-full object-contain drop-shadow-sm"
+                    className="max-h-full max-w-full object-contain drop-shadow-xs"
                   />
+
+                  {/* 수동 크롭 오버레이 (영역 수정 모드일 때 원본 이미지 위에 표시) */}
+                  {isManualCropMode && (
+                    <div
+                      className="absolute inset-x-8 border-2 border-dashed border-sky-500 bg-sky-500/10 pointer-events-none transition-all"
+                      style={{
+                        top: `${(cropYMin / 1000) * 100}%`,
+                        bottom: `${(1 - cropYMax / 1000) * 100}%`,
+                        left: `${(cropXMin / 1000) * 100}%`,
+                        right: `${(1 - cropXMax / 1000) * 100}%`,
+                      }}
+                    >
+                      <span className="absolute -top-6 left-0 bg-sky-600 text-white text-[10px] px-2 py-0.5 rounded font-bold shadow-xs">
+                        선택된 상품 영역 (쇼핑몰 UI 제외)
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* 원본 vs 배경제거(누끼) 전환 버튼 */}
-                <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1 bg-black/70 backdrop-blur-xs p-1 rounded-xl text-[11px] text-white">
+                {/* 뷰 전환 버튼 (정리된 상품 뷰 vs 원본 비교) */}
+                <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1 bg-black/75 backdrop-blur-xs p-1 rounded-xl text-[11px] text-white z-10">
                   <button
                     type="button"
-                    onClick={() => updateCurrentItem({ activeImageMode: "original" })}
+                    onClick={() => updateCurrentItem({ activeView: "cleaned" })}
                     className={`px-2.5 py-1 rounded-lg transition-all ${
-                      currentItem?.activeImageMode === "original"
-                        ? "bg-white text-zinc-900 font-bold"
-                        : "text-zinc-300 hover:text-white"
-                    }`}
-                  >
-                    원본 사진
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateCurrentItem({ activeImageMode: "nobg" })}
-                    className={`px-2.5 py-1 rounded-lg transition-all ${
-                      currentItem?.activeImageMode === "nobg"
+                      currentItem?.activeView === "cleaned"
                         ? "bg-sky-500 text-white font-bold"
                         : "text-zinc-300 hover:text-white"
                     }`}
                   >
-                    배경 제거
+                    정리된 상품 사진
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateCurrentItem({ activeView: "original" })}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      currentItem?.activeView === "original"
+                        ? "bg-white text-zinc-900 font-bold"
+                        : "text-zinc-300 hover:text-white"
+                    }`}
+                  >
+                    업로드 원본
                   </button>
                 </div>
 
-                {/* AI 상태 배너 */}
-                <div className="absolute top-2.5 left-2.5">
+                {/* 수동 크롭 열기 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsManualCropMode(!isManualCropMode)
+                    updateCurrentItem({ activeView: "original" })
+                  }}
+                  className="absolute bottom-2.5 left-2.5 flex items-center gap-1 bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-zinc-700 dark:text-zinc-200 shadow-xs hover:bg-zinc-100 z-10"
+                >
+                  <Crop className="w-3.5 h-3.5 text-sky-600" />
+                  <span>{isManualCropMode ? "크롭 닫기" : "영역 직접 수정"}</span>
+                </button>
+
+                {/* AI 처리 배너 */}
+                <div className="absolute top-2.5 left-2.5 z-10">
                   {currentItem?.status === "processing" ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500 text-white text-[11px] font-bold shadow-sm">
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500 text-white text-[11px] font-bold shadow-xs">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      AI 분석 중...
-                    </span>
-                  ) : currentItem?.status === "analyzed" ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold shadow-sm">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      AI 자동 분석 완료
+                      스마트 분리 중...
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-600 text-white text-[11px] font-bold shadow-sm">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      직접 확인 필요
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold shadow-xs">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      상품 정돈 완료 (로고·프린트 보존)
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* 속성 수정 폼 */}
-              <div className="space-y-3.5">
-                {/* 1. 옷 이름 */}
+              {/* 수동 크롭 조절 슬라이더 패널 */}
+              {isManualCropMode && (
+                <div className="p-3.5 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl space-y-2.5 text-xs animate-in fade-in-50">
+                  <div className="flex items-center justify-between font-bold text-sky-900 dark:text-sky-200">
+                    <span className="flex items-center gap-1">
+                      <Sliders className="w-3.5 h-3.5 text-sky-600" />
+                      <span>자르기 영역 미세 조절</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-normal">
+                      쇼핑몰 하트/뱃지가 보이면 하단을 위로 올려주세요
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] text-zinc-500">상단 위치: {cropYMin / 10}%</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="500"
+                        value={cropYMin}
+                        onChange={(e) => setCropYMin(Number(e.target.value))}
+                        className="w-full accent-sky-600"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500">하단 위치: {cropYMax / 10}%</span>
+                      <input
+                        type="range"
+                        min="500"
+                        max="1000"
+                        value={cropYMax}
+                        onChange={(e) => setCropYMax(Number(e.target.value))}
+                        className="w-full accent-sky-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleApplyManualCrop}
+                      className="px-3.5 py-1.5 bg-sky-600 text-white rounded-xl text-xs font-bold hover:bg-sky-700 shadow-xs flex items-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>이 영역으로 다시 정리하기</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 속성 폼 */}
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    옷 이름 / 별칭
+                    옷 이름 (짧고 명확한 이름)
                   </label>
                   <input
                     type="text"
                     value={currentItem?.name || ""}
                     onChange={(e) => updateCurrentItem({ name: e.target.value })}
-                    placeholder="예: 베이지 케이블 니트"
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="예: 차콜 반집업 니트, 연청 와이드 데님"
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
-                {/* 2. 카테고리 선택 */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                     카테고리
@@ -443,7 +581,6 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                   </div>
                 </div>
 
-                {/* 3. 스타일 선택 */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                     스타일 분위기
@@ -466,10 +603,9 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                   </div>
                 </div>
 
-                {/* 4. 적합 계절 다중 선택 */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    적합 계절 (중복 선택 가능)
+                    적합 계절
                   </label>
                   <div className="flex gap-1.5">
                     {(Object.keys(SEASON_LABELS) as Season[]).map((season) => {
@@ -492,61 +628,45 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                   </div>
                 </div>
 
-                {/* 5. 소재 & 두께 & 보온성 (요구사항: 사진만으로 판단하기 어려우므로 추측을 확정하지 않고 사용자 확인 유도) */}
-                <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-2xl space-y-2.5">
-                  <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+                {/* 소재 & 두께 확인 배너 */}
+                <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-2xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-200">
                     <span className="flex items-center gap-1.5">
                       <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
-                      소재 및 보온성 확인 (사용자 확인 권장)
-                    </span>
-                    <span className="text-[10px] text-amber-700 dark:text-amber-300 font-normal">
-                      사진만으로는 정확한 두께 판단이 어려워요
+                      소재 & 보온성 확인 (사용자 검토 권장)
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="block text-zinc-500 dark:text-zinc-400 mb-1">두께감</span>
+                      <span className="block text-zinc-500 mb-1">두께감</span>
                       <select
                         value={currentItem?.thickness || "medium"}
                         onChange={(e) =>
                           updateCurrentItem({ thickness: e.target.value as ThicknessLevel })
                         }
-                        className="w-full p-2 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-zinc-700 rounded-xl"
+                        className="w-full p-1.5 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-zinc-700 rounded-xl"
                       >
-                        <option value="thin">얇음 (여름/간절기)</option>
-                        <option value="medium">보통 (사계절/봄가을)</option>
-                        <option value="thick">두꺼움 (겨울/기모/헤비)</option>
+                        <option value="thin">얇음</option>
+                        <option value="medium">보통</option>
+                        <option value="thick">두꺼움</option>
                       </select>
                     </div>
 
                     <div>
-                      <span className="block text-zinc-500 dark:text-zinc-400 mb-1">보온성</span>
+                      <span className="block text-zinc-500 mb-1">보온성</span>
                       <select
                         value={currentItem?.warmth || "medium"}
                         onChange={(e) =>
                           updateCurrentItem({ warmth: e.target.value as WarmthLevel })
                         }
-                        className="w-full p-2 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-zinc-700 rounded-xl"
+                        className="w-full p-1.5 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-zinc-700 rounded-xl"
                       >
-                        <option value="low">낮음 (시원함)</option>
-                        <option value="medium">보통 (적당한 보온)</option>
-                        <option value="high">높음 (따뜻함/방한)</option>
+                        <option value="low">낮음</option>
+                        <option value="medium">보통</option>
+                        <option value="high">높음 (따뜻함)</option>
                       </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <span className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">
-                      소재 (직접 수정 가능)
-                    </span>
-                    <input
-                      type="text"
-                      value={currentItem?.material || ""}
-                      onChange={(e) => updateCurrentItem({ material: e.target.value })}
-                      placeholder="예: 울 80%, 캐시미어 20%"
-                      className="w-full px-3 py-1.5 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-zinc-700 rounded-xl text-xs"
-                    />
                   </div>
                 </div>
               </div>
@@ -554,7 +674,7 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
           )}
         </div>
 
-        {/* 하단 버튼 바 */}
+        {/* 푸터 버튼 */}
         {pendingQueue.length > 0 && (
           <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between gap-2">
             <button
@@ -566,9 +686,9 @@ export function ClothUploadModal({ isOpen, onClose, onSaveItem }: ClothUploadMod
                   setCurrentIndex(Math.max(0, nextQueue.length - 1))
                 }
               }}
-              className="py-2.5 px-4 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="py-2.5 px-4 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
             >
-              이 사진 건너뛰기
+              건너뛰기
             </button>
 
             <button

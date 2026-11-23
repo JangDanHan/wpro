@@ -93,6 +93,17 @@ export interface ValidationResult {
   errorMessage?: string
 }
 
+export interface ProductItem {
+  id: string
+  category: "outer" | "top" | "bottom" | "shoes" | "accessory"
+  categoryLabel: string // "외투", "상의", "하의", "신발"
+  name: string // 예: "차콜 반집업 니트", "연청 와이드 데님"
+  photoUrl: string // 밝은 스튜디오 배경의 단독 상품 사진
+  material?: string
+  thickness?: string
+  description?: string
+}
+
 export interface OutfitRecommendation {
   title: string // '지금 참고할 옷차림'
   temperature: number
@@ -110,6 +121,7 @@ export interface OutfitRecommendation {
   style?: "casual" | "formal" | "comfort"
   styleName?: string
   photoCredit?: string
+  productItems?: ProductItem[] // 상의·하의·아우터·신발 개별 상품 사진 목록
   alternativeOutfits?: Array<{
     id: string
     style: "casual" | "formal" | "comfort"
@@ -119,6 +131,7 @@ export interface OutfitRecommendation {
     description: string
     photoUrl: string
     photoCredit: string
+    productItems?: ProductItem[]
   }>
 }
 

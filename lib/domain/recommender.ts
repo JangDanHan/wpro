@@ -53,6 +53,7 @@ export function createRecommendation(
     style: primary.style,
     styleName: primary.styleName,
     photoCredit: primary.photoCredit,
+    productItems: primary.productItems,
     alternativeOutfits: alternatives.map((alt) => ({
       id: alt.id,
       style: alt.style,
@@ -62,6 +63,7 @@ export function createRecommendation(
       description: alt.description,
       photoUrl: alt.photoUrl,
       photoCredit: alt.photoCredit,
+      productItems: alt.productItems,
     })),
   }
 }
