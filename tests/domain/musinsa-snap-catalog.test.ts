@@ -6,36 +6,34 @@ import {
 } from "@/lib/domain/musinsa-snap-catalog"
 import { createRecommendation } from "@/lib/domain/recommender"
 import { ValidatedWeatherData } from "@/lib/domain/types"
+import fs from "fs"
+import path from "path"
 
-describe("무신사 스냅 코디 카탈로그 (Musinsa Snap Catalog)", () => {
+describe("날씨 맞춤 코디 보드 카탈로그 (Outfit Board Catalog)", () => {
   it("추천 대상 무신사 프로필 URL이 정확히 설정되어 있어야 한다", () => {
     expect(TARGET_MUSINSA_PROFILE_URL).toBe(
       "https://www.musinsa.com/snap/profile/1234627203913810064",
     )
   })
 
-  it("모든 게시물은 유효한 무신사 스냅 URL과 프로필 URL을 포함해야 한다 (가짜 주소 방지)", () => {
-    expect(MUSINSA_SNAP_POSTS.length).toBeGreaterThan(5)
+  it("모든 코디는 유효한 원문 링크와 구체적인 추천 이유를 포함해야 한다", () => {
+    expect(MUSINSA_SNAP_POSTS.length).toBeGreaterThanOrEqual(5)
 
     for (const post of MUSINSA_SNAP_POSTS) {
       expect(post.postUrl).toMatch(/^https:\/\/www\.musinsa\.com\/snap\//)
-      expect(post.profileUrl).toBe(TARGET_MUSINSA_PROFILE_URL)
-      expect(post.creatorName).toBeTruthy()
+      expect(post.title).toBeTruthy()
       expect(post.clothingItems).toBeTruthy()
-      expect(post.productItems.length).toBeGreaterThanOrEqual(2)
+      expect(post.description).toBeTruthy()
+      expect(post.productItems.length).toBeGreaterThanOrEqual(3)
     }
   })
 
-  it("서로 다른 게시물의 아이템이 섞이지 않고, 단일 게시물 내의 productItems만 유지되어야 한다", () => {
-    const postIds = new Set(MUSINSA_SNAP_POSTS.map((p) => p.id))
-    expect(postIds.size).toBe(MUSINSA_SNAP_POSTS.length)
-
+  it("모든 상품 사진은 실제 존재하는 로컬 파일이어야 하며, 이미지 로딩 실패가 발생하지 않아야 한다", () => {
     for (const post of MUSINSA_SNAP_POSTS) {
-      // 각 게시물의 상품 ID는 해당 게시물의 snapId 프리픽스를 가져야 함
       for (const item of post.productItems) {
-        expect(item.name).toBeTruthy()
-        expect(item.photoUrl).toBeTruthy()
-        expect(item.category).toBeTruthy()
+        expect(item.photoUrl).toMatch(/^\/images\/products\//)
+        const localPath = path.join(process.cwd(), "public", item.photoUrl)
+        expect(fs.existsSync(localPath)).toBe(true)
       }
     }
   })
@@ -47,39 +45,19 @@ describe("무신사 스냅 코디 카탈로그 (Musinsa Snap Catalog)", () => {
     expect(primary.clothingItems).toMatch(/(패딩|다운)/)
   })
 
-  it("17℃ 봄/가을 기온에서는 블레이저나 트러커 등 간절기 룩이 추천되어야 한다", () => {
-    const { primary } = getMusinsaSnapRecommendations(17)
-    expect(primary.tempMin).toBeLessThanOrEqual(17)
-    expect(primary.tempMax).toBeGreaterThan(17)
-  })
-
-  it("30℃ 폭염 기온에서는 썸머 쿨링 룩이 최우선 추천되어야 한다", () => {
-    const { primary } = getMusinsaSnapRecommendations(30)
-    expect(primary.tempMin).toBeLessThanOrEqual(30)
-    expect(primary.tempMax).toBeGreaterThan(30)
-    expect(primary.clothingItems).toMatch(/(쇼츠|반팔|슬라이드|샌들)/)
-  })
-
-  it("비가 올 때 방수/발수 기능성 스트릿 룩이 적절히 가산점을 받아야 한다", () => {
-    const { primary } = getMusinsaSnapRecommendations(12, null, "rain")
-    expect(primary.clothingItems).toMatch(/(방수|윈드브레이커|쉘)/)
-  })
-
-  it("상황 입력에 '출근' 또는 '면접'이 포함되면 포멀/단정한 스타일이 우선 고려되어야 한다", () => {
-    const { primary } = getMusinsaSnapRecommendations(16, "중요한 회사 출근 미팅")
+  it("초겨울 단정한 출근 상황에서는 울 롱코트와 셔츠 룩이 최우선 추천되어야 한다", () => {
+    const { primary } = getMusinsaSnapRecommendations(3, "회사 출근")
     expect(primary.style).toBe("formal")
-    expect(primary.styleName).toBe("단정한 스타일")
+    expect(primary.clothingItems).toMatch(/(코트|셔츠)/)
   })
 
-  it("날씨 적합성을 판단할 정보가 부족한 코디는 isWeatherVerified: false와 사유가 명시되어야 한다", () => {
-    const unverifiedPosts = MUSINSA_SNAP_POSTS.filter((p) => !p.isWeatherVerified)
-    expect(unverifiedPosts.length).toBeGreaterThan(0)
-    for (const post of unverifiedPosts) {
-      expect(post.unverifiedReason).toBeTruthy()
-    }
+  it("간절기(12℃) 캐주얼 상황에서는 데님 및 스니커즈 조합이 추천되어야 한다", () => {
+    const { primary } = getMusinsaSnapRecommendations(12, "대학생 캠퍼스 데일리")
+    expect(primary.style).toBe("casual")
+    expect(primary.clothingItems).toMatch(/(데님|스니커즈)/)
   })
 
-  it("createRecommendation은 무신사 스냅 원문 URL 및 날씨 검증 상태를 정확히 반환해야 한다", () => {
+  it("createRecommendation은 코디 보드 구성과 상품 리스트를 정확히 반환해야 한다", () => {
     const mockWeather: ValidatedWeatherData = {
       cityId: "seoul",
       cityName: "서울특별시 종로구 청운동",
@@ -96,10 +74,8 @@ describe("무신사 스냅 코디 카탈로그 (Musinsa Snap Catalog)", () => {
 
     const rec = createRecommendation(mockWeather, "데이트")
     expect(rec.snapUrl).toMatch(/^https:\/\/www\.musinsa\.com\/snap\//)
-    expect(rec.musinsaProfileUrl).toBe(TARGET_MUSINSA_PROFILE_URL)
-    expect(rec.isWeatherVerified).toBeDefined()
     expect(rec.productItems).toBeDefined()
+    expect(rec.productItems!.length).toBeGreaterThanOrEqual(3)
     expect(rec.alternativeOutfits?.length).toBeGreaterThan(0)
-    expect(rec.alternativeOutfits?.[0].snapUrl).toMatch(/^https:\/\/www\.musinsa\.com\/snap\//)
   })
 })

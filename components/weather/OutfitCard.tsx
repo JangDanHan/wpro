@@ -6,13 +6,10 @@ import { MusinsaSnapStyle } from "@/lib/domain/musinsa-snap-catalog"
 import {
   Sparkles,
   RefreshCw,
-  ImageOff,
-  CheckCircle2,
-  AlertTriangle,
   ExternalLink,
   X,
   Info,
-  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react"
 
 interface OutfitCardProps {
@@ -26,68 +23,48 @@ interface OutfitCardProps {
 
 interface DisplayOutfit {
   id: string
-  snapPostId?: string
   snapUrl: string
-  creatorName: string
   title: string
   clothingItems: string
   description: string
-  photoUrl?: string
-  photoCredit?: string
   style: MusinsaSnapStyle
   styleName: string
   productItems: ProductItem[]
-  isWeatherVerified: boolean
-  unverifiedReason?: string | null
 }
 
 const DEFAULT_PROFILE_URL = "https://www.musinsa.com/snap/profile/1234627203913810064"
 
 export function OutfitCard({
   recommendation,
-  onRefresh,
-  isFetching,
 }: OutfitCardProps) {
-  // 사용 가능한 무신사 스냅 코디 리스트 (대표 게시물 + 대체 실제 게시물들)
+  // 사용 가능한 코디 리스트 (대표 게시물 + 대체 실제 게시물들)
   const allOutfits = useMemo<DisplayOutfit[]>(() => {
     const list: DisplayOutfit[] = []
 
-    // 1. 대표 추천 무신사 스냅 게시물
+    // 1. 대표 추천 코디
     list.push({
       id: "primary",
-      snapPostId: recommendation.snapPostId,
       snapUrl: recommendation.snapUrl || DEFAULT_PROFILE_URL,
-      creatorName: recommendation.creatorName || "무신사 스냅 크루",
-      title: recommendation.title || "무신사 스냅 코디",
+      title: recommendation.title || "날씨 맞춤 코디",
       clothingItems: recommendation.clothingItems || recommendation.basicOutfit,
       description: recommendation.reason,
-      photoUrl: recommendation.photoUrl,
-      photoCredit: recommendation.photoCredit || "무신사 스냅 (1234627203913810064)",
       style: (recommendation.style as MusinsaSnapStyle) || "casual",
       styleName: recommendation.styleName || "캐주얼",
       productItems: recommendation.productItems || [],
-      isWeatherVerified: recommendation.isWeatherVerified ?? true,
-      unverifiedReason: recommendation.unverifiedReason,
     })
 
-    // 2. 대체 무신사 스냅 게시물들 (서로 다른 게시물 단위, 아이템 혼합 없음)
+    // 2. 대체 코디들 (완성된 한 벌 단위, 아이템 혼합 없음)
     if (Array.isArray(recommendation.alternativeOutfits)) {
       for (const alt of recommendation.alternativeOutfits) {
         list.push({
           id: alt.id,
-          snapPostId: alt.snapPostId,
           snapUrl: alt.snapUrl || DEFAULT_PROFILE_URL,
-          creatorName: alt.creatorName || "무신사 스냅 크루",
           title: alt.title,
           clothingItems: alt.clothingItems,
           description: alt.description,
-          photoUrl: alt.photoUrl,
-          photoCredit: alt.photoCredit || "무신사 스냅 (1234627203913810064)",
           style: alt.style,
           styleName: alt.styleName,
           productItems: alt.productItems || [],
-          isWeatherVerified: alt.isWeatherVerified ?? true,
-          unverifiedReason: alt.unverifiedReason,
         })
       }
     }
@@ -98,7 +75,6 @@ export function OutfitCard({
   // 스타일 필터 (전체, 캐주얼, 단정한 스타일, 편한 스타일)
   const [selectedStyleFilter, setSelectedStyleFilter] = useState<"all" | MusinsaSnapStyle>("all")
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({})
   const [selectedProductDetail, setSelectedProductDetail] = useState<ProductItem | null>(null)
 
   // 현재 필터에 맞는 코디 목록
@@ -112,7 +88,7 @@ export function OutfitCard({
   const safeIndex = currentIndex % (filteredOutfits.length || 1)
   const currentOutfit = filteredOutfits[safeIndex] || allOutfits[0]
 
-  // '다른 코디 보기' 핸들러 (순환 회전)
+  // '다른 코디 보기' 핸들러 (보드 전체가 새로운 조합으로 전환)
   const handleNextOutfit = () => {
     setCurrentIndex((prev) => (prev + 1) % filteredOutfits.length)
   }
@@ -123,25 +99,31 @@ export function OutfitCard({
     setCurrentIndex(0)
   }
 
+  // 코디 아이템 분리 (외투, 상의, 하의, 신발)
+  const outerProduct = currentOutfit.productItems.find((p) => p.category === "outer")
+  const topProduct = currentOutfit.productItems.find((p) => p.category === "top")
+  const bottomProduct = currentOutfit.productItems.find((p) => p.category === "bottom")
+  const shoesProduct = currentOutfit.productItems.find((p) => p.category === "shoes")
+
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-sm space-y-4">
-      {/* 1. 상단 헤더 & 다른 코디 추천 버튼 */}
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+      {/* 1. 상단 바: 타이틀 & 다른 코디 버튼 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 rounded-xl">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                무신사 스냅 날씨 코디 추천
+                날씨 맞춤 완성 코디
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700">
-                실제 게시물 단위
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/60">
+                코디 보드
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              무신사 스냅에 실제 등록된 완성형 코디 중 오늘 날씨에 맞는 룩을 추천합니다
+              오늘 날씨와 일정에 어울리는 한 벌 구성을 플랫레이로 확인해보세요
             </p>
           </div>
         </div>
@@ -149,7 +131,7 @@ export function OutfitCard({
         <button
           type="button"
           onClick={handleNextOutfit}
-          className="flex items-center gap-1 py-1.5 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 py-1.5 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold transition-transform active:scale-95 cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5 text-sky-600" />
           <span>다른 코디</span>
@@ -204,137 +186,139 @@ export function OutfitCard({
         </button>
       </div>
 
-      {/* 3. 코디 게시물 헤더 & 날씨 적합성 배지 */}
-      <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100">
-              {currentOutfit.title}
-            </span>
-            <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
-              by {currentOutfit.creatorName}
-            </span>
+      {/* 3. [핵심 요구사항] 하나의 완성된 코디 보드 (Flat Lay Canvas) */}
+      {/* 4개의 개별 사각형 테두리를 완전히 제거하고 하나의 밝은 단일 캔버스 배경 안에 배치 */}
+      <div className="relative w-full rounded-3xl bg-[#f8fafc] dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 p-5 sm:p-7 flex flex-col items-center justify-center min-h-[460px] sm:min-h-[500px] shadow-inner select-none overflow-hidden">
+        
+        {/* 플랫레이 실루엣 컨테이너 (사람·마네킹 없이 오직 옷과 신발의 형태와 비율만 표현) */}
+        <div className="relative w-full max-w-[360px] flex flex-col items-center py-2">
+          
+          {/* [상단 영역]: 아우터 & 상의 */}
+          <div className="relative w-full flex items-center justify-center h-[175px] sm:h-[195px]">
+            {outerProduct && (
+              <div
+                onClick={() => setSelectedProductDetail(outerProduct)}
+                className={`absolute transition-transform duration-300 hover:scale-105 cursor-pointer ${
+                  topProduct
+                    ? "left-2 sm:left-4 w-[52%] max-w-[180px] z-10 hover:z-30"
+                    : "w-[72%] max-w-[240px] z-10"
+                }`}
+                title={`${outerProduct.name} (클릭하여 상세 정보 보기)`}
+              >
+                <img
+                  src={outerProduct.photoUrl}
+                  alt={outerProduct.name}
+                  className="w-full h-[170px] sm:h-[190px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
+                />
+              </div>
+            )}
+
+            {topProduct && (
+              <div
+                onClick={() => setSelectedProductDetail(topProduct)}
+                className={`transition-transform duration-300 hover:scale-105 cursor-pointer ${
+                  outerProduct
+                    ? "relative ml-auto right-2 sm:right-4 w-[46%] max-w-[165px] z-20 hover:z-30"
+                    : "w-[62%] max-w-[210px] z-20"
+                }`}
+                title={`${topProduct.name} (클릭하여 상세 정보 보기)`}
+              >
+                <img
+                  src={topProduct.photoUrl}
+                  alt={topProduct.name}
+                  className="w-full h-[160px] sm:h-[180px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
+                />
+              </div>
+            )}
           </div>
+
+          {/* [중단 영역]: 하의 (바지) - 상의 바로 아래에 실루엣이 자연스럽게 이어짐 */}
+          {bottomProduct && (
+            <div
+              onClick={() => setSelectedProductDetail(bottomProduct)}
+              className="w-[48%] max-w-[170px] -mt-3 sm:-mt-5 z-15 hover:z-30 transition-transform duration-300 hover:scale-105 cursor-pointer"
+              title={`${bottomProduct.name} (클릭하여 상세 정보 보기)`}
+            >
+              <img
+                src={bottomProduct.photoUrl}
+                alt={bottomProduct.name}
+                className="w-full h-[175px] sm:h-[200px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
+              />
+            </div>
+          )}
+
+          {/* [하단 영역]: 신발 - 바지 밑단 아래에 가지런히 배치 */}
+          {shoesProduct && (
+            <div
+              onClick={() => setSelectedProductDetail(shoesProduct)}
+              className="w-[36%] max-w-[130px] -mt-2 sm:-mt-3 z-20 hover:z-30 transition-transform duration-300 hover:scale-105 cursor-pointer"
+              title={`${shoesProduct.name} (클릭하여 상세 정보 보기)`}
+            >
+              <img
+                src={shoesProduct.photoUrl}
+                alt={shoesProduct.name}
+                className="w-full h-[80px] sm:h-[90px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 캔버스 하단 클릭 안내 팁 (간결한 텍스트) */}
+        <div className="mt-2 text-center">
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+            상품을 누르면 소재와 두께감 등 상세 정보를 확인할 수 있습니다
+          </span>
+        </div>
+      </div>
+
+      {/* 4. 코디 정보 영역: 보드 아래에 간결하고 명확하게 표시 (이미지 위 겹침 배제) */}
+      <div className="bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-3">
+        {/* 코디 이름 & 스타일 */}
+        <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60 dark:border-zinc-700/60">
+          <h3 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100">
+            {currentOutfit.title}
+          </h3>
           <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md">
             {currentOutfit.styleName}
           </span>
         </div>
 
-        {/* 날씨 적합성 검증 상태 배지 */}
-        <div className="flex items-center gap-2 pt-0.5">
-          {currentOutfit.isWeatherVerified ? (
-            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>날씨 적합성 검증 완료</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>별도 확인 필요 대상</span>
-            </div>
-          )}
-
-          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate">
-            {currentOutfit.clothingItems}
+        {/* 구성: 아우터 + 상의 + 하의 + 신발 */}
+        <div className="space-y-1">
+          <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+            코디 구성
           </span>
-        </div>
-
-        {/* 날씨 미검증 사유 경고 */}
-        {!currentOutfit.isWeatherVerified && currentOutfit.unverifiedReason && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-950/20 p-2 rounded-xl border border-amber-200/60 dark:border-amber-900/40">
-            ⚠️ {currentOutfit.unverifiedReason}
+          <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+            {currentOutfit.clothingItems}
           </p>
-        )}
-      </div>
-
-      {/* 4. 개별 상품 이미지 그리드 (상의·하의·아우터·신발 단독 상품 사진 세트) */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-        {currentOutfit.productItems.length > 0 ? (
-          currentOutfit.productItems.map((product) => {
-            const hasError = imageErrorMap[product.id]
-
-            return (
-              <div
-                key={product.id}
-                onClick={() => setSelectedProductDetail(product)}
-                className="group relative bg-[#f8fafc] dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 rounded-2xl p-2.5 flex flex-col justify-between transition-all hover:border-sky-400 hover:shadow-xs cursor-pointer overflow-hidden"
-              >
-                {/* 카테고리 라벨 칩 (외투 / 상의 / 하의 / 신발) */}
-                <div className="flex items-center justify-between mb-1 z-10">
-                  <span className="px-2 py-0.5 rounded-md bg-white/90 dark:bg-zinc-900/90 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60 shadow-2xs">
-                    {product.categoryLabel}
-                  </span>
-                  <Info className="w-3 h-3 text-zinc-400 group-hover:text-sky-500 transition-colors" />
-                </div>
-
-                {/* 상품 이미지 영역: 흰색/밝은 배경 중앙 배치, object-contain으로 끝 잘림 방지 */}
-                <div className="relative aspect-square w-full flex items-center justify-center p-2 overflow-hidden my-0.5">
-                  {hasError ? (
-                    <div className="flex flex-col items-center justify-center text-zinc-400 gap-1 text-[10px]">
-                      <ImageOff className="w-6 h-6" />
-                      <span>이미지 불러오기 실패</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={product.photoUrl}
-                      alt={product.name}
-                      onError={() =>
-                        setImageErrorMap((prev) => ({ ...prev, [product.id]: true }))
-                      }
-                      className="max-h-full max-w-full object-contain drop-shadow-xs group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
-                  )}
-                </div>
-
-                {/* 상품 짧은 이름 (예: ‘차콜 반집업 니트’, ‘연청 와이드 데님’) */}
-                <div className="pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60 text-center">
-                  <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-sky-600 transition-colors">
-                    {product.name}
-                  </p>
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <div className="col-span-2 py-8 text-center text-xs text-zinc-400">
-            게시물 상품 정보 준비 중입니다.
-          </div>
-        )}
-      </div>
-
-      {/* 5. 코디 추천 이유 및 날씨 관련 간결한 설명 (사진 아래 배치) */}
-      <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1.5 text-xs">
-        <div className="flex items-center gap-1.5 font-bold text-zinc-700 dark:text-zinc-300">
-          <CheckCircle2 className="w-3.5 h-3.5 text-sky-600" />
-          <span>추천 코디 구성 & 이유</span>
         </div>
-        <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
-          {currentOutfit.description}
-        </p>
+
+        {/* 오늘 날씨와 일정에 어울리는 구체적 이유 */}
+        <div className="space-y-1 pt-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-600 dark:text-zinc-300">
+            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+            <span>오늘 날씨 추천 이유</span>
+          </div>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            {currentOutfit.description}
+          </p>
+        </div>
+
+        {/* 실제 원문 / 무신사 링크 버튼 */}
+        <div className="pt-2">
+          <a
+            href={currentOutfit.snapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-98 cursor-pointer"
+          >
+            <span>무신사에서 코디 보기</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
 
-      {/* 6. [핵심 요구] 무신사에서 코디 보기 버튼 (원문 게시물 링크 연결) */}
-      <div className="pt-1">
-        <a
-          href={currentOutfit.snapUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-2xl text-xs font-bold transition-all shadow-sm active:scale-98 cursor-pointer"
-        >
-          <span>무신사에서 코디 보기</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-      </div>
-
-      {/* 7. 공식 제휴 오해 방지 안내 고지 (PRD / 규정 준수) */}
-      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800/60 text-center">
-        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-          ※ 본 서비스는 무신사의 공식 제휴 서비스가 아니며, 무신사 스냅에 공개된 실제 코디 게시물을 날씨에 맞게 큐레이션하여 원문 링크를 안내하는 비공식 참고 서비스입니다.
-        </p>
-      </div>
-
-      {/* 8. 상품 클릭 시 상세 정보 모달 */}
+      {/* 5. 상품 상세 모달 */}
       {selectedProductDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-50">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
@@ -351,7 +335,7 @@ export function OutfitCard({
               </button>
             </div>
 
-            <div className="aspect-square w-full bg-[#f8fafc] dark:bg-zinc-800 rounded-2xl flex items-center justify-center p-3">
+            <div className="aspect-square w-full bg-[#f8fafc] dark:bg-zinc-800 rounded-2xl flex items-center justify-center p-4">
               <img
                 src={selectedProductDetail.photoUrl}
                 alt={selectedProductDetail.name}
