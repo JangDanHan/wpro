@@ -115,16 +115,25 @@ export interface OutfitRecommendation {
   isAiGenerated?: boolean
   situation?: string | null
   situationSummary?: string | null
-  // 사진 중심 코디 추천 확장 필드
+  // 무신사 스냅 기반 코디 추천 확장 필드
+  snapPostId?: string
+  snapUrl?: string // 무신사 원문 게시물 URL (https://www.musinsa.com/snap/...)
+  musinsaProfileUrl?: string // 추천 대상 프로필 URL (https://www.musinsa.com/snap/profile/1234627203913810064)
+  creatorName?: string // 크리에이터 / 작성자
   photoUrl?: string
   clothingItems?: string
-  style?: "casual" | "formal" | "comfort"
+  style?: "casual" | "formal" | "comfort" | "street" | "minimal"
   styleName?: string
   photoCredit?: string
-  productItems?: ProductItem[] // 상의·하의·아우터·신발 개별 상품 사진 목록
+  productItems?: ProductItem[] // 해당 완성 코디에 포함된 개별 아이템들
+  isWeatherVerified?: boolean // 날씨 적합성 검증 완료 여부
+  unverifiedReason?: string | null // 날씨 적합성 추가 확인 필요 이유
   alternativeOutfits?: Array<{
     id: string
-    style: "casual" | "formal" | "comfort"
+    snapPostId?: string
+    snapUrl?: string
+    creatorName?: string
+    style: "casual" | "formal" | "comfort" | "street" | "minimal"
     styleName: string
     title: string
     clothingItems: string
@@ -132,6 +141,8 @@ export interface OutfitRecommendation {
     photoUrl: string
     photoCredit: string
     productItems?: ProductItem[]
+    isWeatherVerified?: boolean
+    unverifiedReason?: string | null
   }>
 }
 

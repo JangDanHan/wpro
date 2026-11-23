@@ -2,17 +2,17 @@
 
 import { useState, useMemo } from "react"
 import { OutfitRecommendation, ProductItem } from "@/lib/domain/types"
-import { OutfitStyle } from "@/lib/domain/outfit-catalog"
+import { MusinsaSnapStyle } from "@/lib/domain/musinsa-snap-catalog"
 import {
   Sparkles,
   RefreshCw,
   ImageOff,
-  Layers,
   CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
+  ExternalLink,
   X,
   Info,
-  Loader2,
+  ShieldCheck,
 } from "lucide-react"
 
 interface OutfitCardProps {
@@ -26,54 +26,68 @@ interface OutfitCardProps {
 
 interface DisplayOutfit {
   id: string
+  snapPostId?: string
+  snapUrl: string
+  creatorName: string
   title: string
   clothingItems: string
   description: string
   photoUrl?: string
   photoCredit?: string
-  style: OutfitStyle
+  style: MusinsaSnapStyle
   styleName: string
   productItems: ProductItem[]
+  isWeatherVerified: boolean
+  unverifiedReason?: string | null
 }
+
+const DEFAULT_PROFILE_URL = "https://www.musinsa.com/snap/profile/1234627203913810064"
 
 export function OutfitCard({
   recommendation,
   onRefresh,
   isFetching,
-  aiState = "idle",
-  aiErrorMessage,
-  onRetryAi,
 }: OutfitCardProps) {
-  // 사용 가능한 코디 리스트 (대표 코디 + 스타일별 대체 코디들)
+  // 사용 가능한 무신사 스냅 코디 리스트 (대표 게시물 + 대체 실제 게시물들)
   const allOutfits = useMemo<DisplayOutfit[]>(() => {
     const list: DisplayOutfit[] = []
 
-    // 1. 대표 코디
+    // 1. 대표 추천 무신사 스냅 게시물
     list.push({
       id: "primary",
-      title: recommendation.title || "지금 참고할 옷차림",
+      snapPostId: recommendation.snapPostId,
+      snapUrl: recommendation.snapUrl || DEFAULT_PROFILE_URL,
+      creatorName: recommendation.creatorName || "무신사 스냅 크루",
+      title: recommendation.title || "무신사 스냅 코디",
       clothingItems: recommendation.clothingItems || recommendation.basicOutfit,
       description: recommendation.reason,
       photoUrl: recommendation.photoUrl,
-      photoCredit: recommendation.photoCredit || "Unsplash (Free License)",
-      style: (recommendation.style as OutfitStyle) || "casual",
+      photoCredit: recommendation.photoCredit || "무신사 스냅 (1234627203913810064)",
+      style: (recommendation.style as MusinsaSnapStyle) || "casual",
       styleName: recommendation.styleName || "캐주얼",
       productItems: recommendation.productItems || [],
+      isWeatherVerified: recommendation.isWeatherVerified ?? true,
+      unverifiedReason: recommendation.unverifiedReason,
     })
 
-    // 2. 대체 코디들 (다양한 스타일 후보)
+    // 2. 대체 무신사 스냅 게시물들 (서로 다른 게시물 단위, 아이템 혼합 없음)
     if (Array.isArray(recommendation.alternativeOutfits)) {
       for (const alt of recommendation.alternativeOutfits) {
         list.push({
           id: alt.id,
+          snapPostId: alt.snapPostId,
+          snapUrl: alt.snapUrl || DEFAULT_PROFILE_URL,
+          creatorName: alt.creatorName || "무신사 스냅 크루",
           title: alt.title,
           clothingItems: alt.clothingItems,
           description: alt.description,
           photoUrl: alt.photoUrl,
-          photoCredit: alt.photoCredit || "Unsplash (Free License)",
+          photoCredit: alt.photoCredit || "무신사 스냅 (1234627203913810064)",
           style: alt.style,
           styleName: alt.styleName,
           productItems: alt.productItems || [],
+          isWeatherVerified: alt.isWeatherVerified ?? true,
+          unverifiedReason: alt.unverifiedReason,
         })
       }
     }
@@ -82,7 +96,7 @@ export function OutfitCard({
   }, [recommendation])
 
   // 스타일 필터 (전체, 캐주얼, 단정한 스타일, 편한 스타일)
-  const [selectedStyleFilter, setSelectedStyleFilter] = useState<"all" | OutfitStyle>("all")
+  const [selectedStyleFilter, setSelectedStyleFilter] = useState<"all" | MusinsaSnapStyle>("all")
   const [currentIndex, setCurrentIndex] = useState(0)
   const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({})
   const [selectedProductDetail, setSelectedProductDetail] = useState<ProductItem | null>(null)
@@ -104,7 +118,7 @@ export function OutfitCard({
   }
 
   // 스타일 필터 변경
-  const handleSelectStyle = (style: "all" | OutfitStyle) => {
+  const handleSelectStyle = (style: "all" | MusinsaSnapStyle) => {
     setSelectedStyleFilter(style)
     setCurrentIndex(0)
   }
@@ -120,14 +134,14 @@ export function OutfitCard({
           <div>
             <div className="flex items-center gap-1.5">
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                날씨 맞춤 코디 조합
+                무신사 스냅 날씨 코디 추천
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300">
-                단독 상품 사진
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700">
+                실제 게시물 단위
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              상의·하의·아우터·신발을 상품별로 한눈에 비교해보세요
+              무신사 스냅에 실제 등록된 완성형 코디 중 오늘 날씨에 맞는 룩을 추천합니다
             </p>
           </div>
         </div>
@@ -190,17 +204,50 @@ export function OutfitCard({
         </button>
       </div>
 
-      {/* 3. 코디 타이틀 */}
-      <div className="flex items-center justify-between pt-0.5">
-        <span className="text-xs font-black text-zinc-800 dark:text-zinc-200">
-          {currentOutfit.title}
-        </span>
-        <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md">
-          {currentOutfit.styleName}
-        </span>
+      {/* 3. 코디 게시물 헤더 & 날씨 적합성 배지 */}
+      <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100">
+              {currentOutfit.title}
+            </span>
+            <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+              by {currentOutfit.creatorName}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded-md">
+            {currentOutfit.styleName}
+          </span>
+        </div>
+
+        {/* 날씨 적합성 검증 상태 배지 */}
+        <div className="flex items-center gap-2 pt-0.5">
+          {currentOutfit.isWeatherVerified ? (
+            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>날씨 적합성 검증 완료</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>별도 확인 필요 대상</span>
+            </div>
+          )}
+
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate">
+            {currentOutfit.clothingItems}
+          </span>
+        </div>
+
+        {/* 날씨 미검증 사유 경고 */}
+        {!currentOutfit.isWeatherVerified && currentOutfit.unverifiedReason && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-950/20 p-2 rounded-xl border border-amber-200/60 dark:border-amber-900/40">
+            ⚠️ {currentOutfit.unverifiedReason}
+          </p>
+        )}
       </div>
 
-      {/* 4. 개별 상품 이미지 그리드 (상의·하의·아우터·신발을 독립된 상품 사진으로 한 카드에 배치) */}
+      {/* 4. 개별 상품 이미지 그리드 (상의·하의·아우터·신발 단독 상품 사진 세트) */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
         {currentOutfit.productItems.length > 0 ? (
           currentOutfit.productItems.map((product) => {
@@ -251,7 +298,7 @@ export function OutfitCard({
           })
         ) : (
           <div className="col-span-2 py-8 text-center text-xs text-zinc-400">
-            상품 정보 준비 중입니다.
+            게시물 상품 정보 준비 중입니다.
           </div>
         )}
       </div>
@@ -260,14 +307,34 @@ export function OutfitCard({
       <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1.5 text-xs">
         <div className="flex items-center gap-1.5 font-bold text-zinc-700 dark:text-zinc-300">
           <CheckCircle2 className="w-3.5 h-3.5 text-sky-600" />
-          <span>추천 코디 조합 & 이유</span>
+          <span>추천 코디 구성 & 이유</span>
         </div>
         <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
           {currentOutfit.description}
         </p>
       </div>
 
-      {/* 6. 상품 클릭 시 상세 정보 모달 */}
+      {/* 6. [핵심 요구] 무신사에서 코디 보기 버튼 (원문 게시물 링크 연결) */}
+      <div className="pt-1">
+        <a
+          href={currentOutfit.snapUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-2xl text-xs font-bold transition-all shadow-sm active:scale-98 cursor-pointer"
+        >
+          <span>무신사에서 코디 보기</span>
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+      </div>
+
+      {/* 7. 공식 제휴 오해 방지 안내 고지 (PRD / 규정 준수) */}
+      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800/60 text-center">
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+          ※ 본 서비스는 무신사의 공식 제휴 서비스가 아니며, 무신사 스냅에 공개된 실제 코디 게시물을 날씨에 맞게 큐레이션하여 원문 링크를 안내하는 비공식 참고 서비스입니다.
+        </p>
+      </div>
+
+      {/* 8. 상품 클릭 시 상세 정보 모달 */}
       {selectedProductDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-50">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
@@ -278,7 +345,7 @@ export function OutfitCard({
               <button
                 type="button"
                 onClick={() => setSelectedProductDetail(null)}
-                className="p-1 text-zinc-400 hover:text-zinc-600 rounded-lg"
+                className="p-1 text-zinc-400 hover:text-zinc-600 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -320,7 +387,7 @@ export function OutfitCard({
             <button
               type="button"
               onClick={() => setSelectedProductDetail(null)}
-              className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-bold hover:bg-zinc-800"
+              className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-bold hover:bg-zinc-800 cursor-pointer"
             >
               닫기
             </button>
