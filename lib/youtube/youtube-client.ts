@@ -88,11 +88,13 @@ export function decodeHtmlEntities(str: string): string {
 /**
  * YouTube Data API v3를 호출하여 검색어에 해당하는 첫 번째 영상 정보를 가져옵니다.
  * 캐시 및 중복 요청 방지가 적용되어 있습니다.
+ * 개별 곡 메타데이터(trackMeta)를 전달받아 플레이리스트가 아닌 단일 곡 정보로 보강합니다.
  */
 export async function searchYouTubeVideo(
   searchQuery: string,
   reason: string,
   parentSignal?: AbortSignal,
+  trackMeta?: Partial<MusicRecommendation>,
 ): Promise<MusicRecommendation | null> {
   const cleanQuery = (searchQuery || "").trim()
   if (!cleanQuery) {
@@ -104,10 +106,6 @@ export async function searchYouTubeVideo(
   }
 
   const apiKey = getYouTubeApiKey()
-  if (!apiKey) {
-    // 키 누락 시 조용히 null 반환 (키 값 출력 금지)
-    return null
-  }
 
   // 1. 캐시 확인
   const now = Date.now()
@@ -117,7 +115,37 @@ export async function searchYouTubeVideo(
       ...cached.data,
       searchQuery: cleanQuery,
       reason,
+      songTitle: trackMeta?.songTitle || cached.data.title,
+      artist: trackMeta?.artist || cached.data.channelTitle,
+      genre: trackMeta?.genre,
+      origin: trackMeta?.origin,
+      albumArtUrl: trackMeta?.albumArtUrl || cached.data.thumbnailUrl,
+      isIndividualTrack: true,
+      isExhaustedCandidates: trackMeta?.isExhaustedCandidates,
     }
+  }
+
+  // 키 누락 시 fallback: 메타데이터에 등록된 공식 비디오 ID가 있다면 이를 활용
+  if (!apiKey) {
+    if (trackMeta?.videoId) {
+      return {
+        videoId: trackMeta.videoId,
+        title: trackMeta.title || `${trackMeta.artist} - ${trackMeta.songTitle} (Official Audio)`,
+        channelTitle: trackMeta.channelTitle || trackMeta.artist || "Official Channel",
+        thumbnailUrl: trackMeta.thumbnailUrl || trackMeta.albumArtUrl || `https://img.youtube.com/vi/${trackMeta.videoId}/mqdefault.jpg`,
+        videoUrl: `https://www.youtube.com/watch?v=${trackMeta.videoId}`,
+        searchQuery: cleanQuery,
+        reason,
+        songTitle: trackMeta.songTitle,
+        artist: trackMeta.artist,
+        genre: trackMeta.genre,
+        origin: trackMeta.origin,
+        albumArtUrl: trackMeta.albumArtUrl,
+        isIndividualTrack: true,
+        isExhaustedCandidates: trackMeta.isExhaustedCandidates,
+      }
+    }
+    return null
   }
 
   // 2. 동시 동일 요청 중복 방지 (In-flight De-duplication)
@@ -206,12 +234,39 @@ export async function searchYouTubeVideo(
 
   try {
     const videoData = await fetchPromise
-    if (!videoData) return null
+    if (!videoData) {
+      if (trackMeta?.videoId) {
+        return {
+          videoId: trackMeta.videoId,
+          title: trackMeta.title || `${trackMeta.artist} - ${trackMeta.songTitle} (Official Audio)`,
+          channelTitle: trackMeta.channelTitle || trackMeta.artist || "Official Channel",
+          thumbnailUrl: trackMeta.thumbnailUrl || trackMeta.albumArtUrl || `https://img.youtube.com/vi/${trackMeta.videoId}/mqdefault.jpg`,
+          videoUrl: `https://www.youtube.com/watch?v=${trackMeta.videoId}`,
+          searchQuery: cleanQuery,
+          reason,
+          songTitle: trackMeta.songTitle,
+          artist: trackMeta.artist,
+          genre: trackMeta.genre,
+          origin: trackMeta.origin,
+          albumArtUrl: trackMeta.albumArtUrl,
+          isIndividualTrack: true,
+          isExhaustedCandidates: trackMeta.isExhaustedCandidates,
+        }
+      }
+      return null
+    }
 
     return {
       ...videoData,
       searchQuery: cleanQuery,
       reason,
+      songTitle: trackMeta?.songTitle || videoData.title,
+      artist: trackMeta?.artist || videoData.channelTitle,
+      genre: trackMeta?.genre,
+      origin: trackMeta?.origin,
+      albumArtUrl: trackMeta?.albumArtUrl || videoData.thumbnailUrl,
+      isIndividualTrack: true,
+      isExhaustedCandidates: trackMeta?.isExhaustedCandidates,
     }
   } finally {
     pendingRequests.delete(cleanQuery)
@@ -237,8 +292,9 @@ export async function getRecommendedMusic(
   weather: ValidatedWeatherData,
   situation?: string | null,
   parentSignal?: AbortSignal,
+  excludedSongIds?: string[],
 ): Promise<MusicRecommendation | null> {
-  const result = await getRecommendedMusicWithTiming(weather, situation, parentSignal)
+  const result = await getRecommendedMusicWithTiming(weather, situation, parentSignal, excludedSongIds)
   return result.music
 }
 
@@ -255,11 +311,13 @@ export interface MusicWithTimingResult {
  * 단계별(Gemini 쿼리 생성, YouTube API 검색) 소요 시간을 정밀 측정하여 반환하는 함수
  * - 전체 시간 배분 적용 (Gemini 최대 2.5초 지연 시 즉시 Fallback 전환 -> YouTube 최대 3.5초)
  * - 사용자 요청 취소(parentSignal) 시 서버 외부 통신 즉시 중단
+ * - 세션 제외 ID 목록(excludedSongIds)을 반영하여 개별 곡 중복 방지
  */
 export async function getRecommendedMusicWithTiming(
   weather: ValidatedWeatherData,
   situation?: string | null,
   parentSignal?: AbortSignal,
+  excludedSongIds?: string[],
 ): Promise<MusicWithTimingResult> {
   const totalStart = performance.now()
   let geminiElapsedMs = 0
@@ -274,10 +332,10 @@ export async function getRecommendedMusicWithTiming(
 
   try {
     const geminiStart = performance.now()
-    const { searchQuery, reason } = await generateAiMusicQuery(weather, situation, parentSignal)
+    const queryRes = await generateAiMusicQuery(weather, situation, parentSignal, excludedSongIds)
     geminiElapsedMs = Math.round(performance.now() - geminiStart)
 
-    if (parentSignal?.aborted || !searchQuery) {
+    if (parentSignal?.aborted || !queryRes.searchQuery) {
       return {
         music: null,
         timing: {
@@ -288,8 +346,18 @@ export async function getRecommendedMusicWithTiming(
       }
     }
 
+    const trackMeta: Partial<MusicRecommendation> = {
+      songTitle: queryRes.songTitle,
+      artist: queryRes.artist,
+      genre: queryRes.genre,
+      origin: queryRes.origin,
+      albumArtUrl: queryRes.albumArtUrl,
+      videoId: queryRes.officialVideoId,
+      isExhaustedCandidates: queryRes.isExhaustedCandidates,
+    }
+
     const youtubeStart = performance.now()
-    const musicResult = await searchYouTubeVideo(searchQuery, reason, parentSignal)
+    const musicResult = await searchYouTubeVideo(queryRes.searchQuery, queryRes.reason, parentSignal, trackMeta)
     youtubeElapsedMs = Math.round(performance.now() - youtubeStart)
 
     return {
@@ -305,7 +373,7 @@ export async function getRecommendedMusicWithTiming(
       music: null,
       timing: {
         geminiElapsedMs,
-        youtubeElapsedMs,
+        youtubeElapsedMs: 0,
         totalElapsedMs: Math.round(performance.now() - totalStart),
       },
     }

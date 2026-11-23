@@ -52,6 +52,7 @@ export interface UseWeatherRecommendationReturn {
   music: MusicRecommendation | null
   musicErrorMessage: string | null
   retryMusic: () => void
+  fetchNextMusicTrack: () => void
 
   // 4. 소요 시간 측정 지표
   timings: StepTimings
@@ -104,6 +105,8 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   // 요청 ID 및 활성 지역 ID 추적 (경쟁 상태 및 섞임 방지)
   const activeRequestIdRef = useRef<number>(0)
   const activeRegionIdRef = useRef<string | null>(null)
+  // 세션 동안 노출된 음악 ID/제목 추적 (중복 추천 방지)
+  const seenMusicIdsRef = useRef<string[]>([])
 
   // 타이머 관리
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -151,6 +154,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     setSelectedRegionId(null)
     setSelectedRegionLabel(null)
     setValidationError(null)
+    seenMusicIdsRef.current = []
   }, [])
 
   /**
@@ -264,6 +268,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       targetSituation: string | undefined,
       targetRequestId: number,
       targetRegionId: string,
+      customExcludedIds?: string[],
     ) => {
       if (musicAbortRef.current) {
         musicAbortRef.current.abort()
@@ -286,6 +291,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       }, 8000)
 
       const startMs = performance.now()
+      const excluded = customExcludedIds || seenMusicIdsRef.current
 
       try {
         const response = await fetch("/api/recommendation/music", {
@@ -294,6 +300,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
           body: JSON.stringify({
             weather: targetWeather,
             situation: targetSituation?.trim() || undefined,
+            excludedSongIds: excluded,
           }),
           signal: controller.signal,
         })
@@ -324,6 +331,13 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
         if (data.music) {
           setMusic(data.music)
           setMusicState("success")
+
+          // 세션 히스토리에 현재 트랙 추가하여 '다른 곡 추천' 시 중복 배제
+          const trackKey = data.music.songTitle || data.music.videoId || data.music.title
+          if (trackKey && !seenMusicIdsRef.current.includes(trackKey)) {
+            seenMusicIdsRef.current.push(trackKey)
+          }
+
           const timing = data.timing || {}
           setTimings((prev) => ({
             ...prev,
@@ -382,6 +396,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
       setState("loading")
       setAiState("idle")
       setMusicState("idle")
+      seenMusicIdsRef.current = []
 
       const controller = new AbortController()
       weatherAbortRef.current = controller
@@ -567,6 +582,20 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   }, [fetchMusic, selectedRegionId, situation, weather])
 
   /**
+   * '다른 곡 추천' (세션 히스토리를 제외하여 새로운 곡 선곡)
+   */
+  const fetchNextMusicTrack = useCallback(() => {
+    if (!weather || !selectedRegionId) return
+    if (music) {
+      const currentTrackKey = music.songTitle || music.videoId || music.title
+      if (currentTrackKey && !seenMusicIdsRef.current.includes(currentTrackKey)) {
+        seenMusicIdsRef.current.push(currentTrackKey)
+      }
+    }
+    fetchMusic(weather, situation, activeRequestIdRef.current, selectedRegionId, [...seenMusicIdsRef.current])
+  }, [fetchMusic, music, selectedRegionId, situation, weather])
+
+  /**
    * 날씨 새로고침 (카드의 새로고침 버튼 등)
    */
   const refresh = useCallback(
@@ -611,6 +640,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     music,
     musicErrorMessage,
     retryMusic,
+    fetchNextMusicTrack,
 
     timings,
 

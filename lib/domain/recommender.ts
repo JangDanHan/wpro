@@ -2,6 +2,7 @@ import { OutfitRecommendation, ValidatedWeatherData } from "./types"
 import { FIXED_DISCLAIMER, getBasicOutfit } from "./outfit"
 import { getPrecipitationNotice } from "./precipitation"
 import { generateReason } from "./reason"
+import { getOutfitRecommendations } from "./outfit-catalog"
 
 /**
  * PRD 3.3. 옷차림 추천 카드 생성기
@@ -10,10 +11,12 @@ import { generateReason } from "./reason"
  * 3. 비·눈이 확인된 경우 강수 대비 항목
  * 4. 실제 날씨와 연결한 추천 이유
  * 5. 필요한 경우 정보 누락 안내
+ * 6. 고화질 실제 착장 사진 및 스타일별 대체 코디 매핑
  * 고정 안내 문구 포함
  */
 export function createRecommendation(
   weather: ValidatedWeatherData,
+  situation?: string | null,
 ): OutfitRecommendation {
   const outfitRule = getBasicOutfit(weather.temperature)
   const precipitationNotice = getPrecipitationNotice(weather.precipitationType)
@@ -21,6 +24,11 @@ export function createRecommendation(
     weather.temperature,
     outfitRule.basicOutfit,
     weather.precipitationType,
+  )
+
+  const { primary, alternatives } = getOutfitRecommendations(
+    weather.temperature,
+    situation,
   )
 
   let missingNotice: string | null = null
@@ -40,5 +48,20 @@ export function createRecommendation(
     reason,
     fixedDisclaimer: FIXED_DISCLAIMER,
     missingNotice,
+    photoUrl: primary.photoUrl,
+    clothingItems: primary.clothingItems,
+    style: primary.style,
+    styleName: primary.styleName,
+    photoCredit: primary.photoCredit,
+    alternativeOutfits: alternatives.map((alt) => ({
+      id: alt.id,
+      style: alt.style,
+      styleName: alt.styleName,
+      title: alt.title,
+      clothingItems: alt.clothingItems,
+      description: alt.description,
+      photoUrl: alt.photoUrl,
+      photoCredit: alt.photoCredit,
+    })),
   }
 }

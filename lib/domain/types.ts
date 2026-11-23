@@ -103,6 +103,22 @@ export interface OutfitRecommendation {
   isAiGenerated?: boolean
   situation?: string | null
   situationSummary?: string | null
+  // 사진 중심 코디 추천 확장 필드
+  photoUrl?: string
+  clothingItems?: string
+  style?: "casual" | "formal" | "comfort"
+  styleName?: string
+  photoCredit?: string
+  alternativeOutfits?: Array<{
+    id: string
+    style: "casual" | "formal" | "comfort"
+    styleName: string
+    title: string
+    clothingItems: string
+    description: string
+    photoUrl: string
+    photoCredit: string
+  }>
 }
 
 export interface MusicRecommendation {
@@ -113,4 +129,12 @@ export interface MusicRecommendation {
   videoUrl: string
   searchQuery: string
   reason: string
+  // 개별 곡(Single Track) 추천 확장 필드
+  songTitle?: string
+  artist?: string
+  genre?: string
+  origin?: "domestic" | "international"
+  albumArtUrl?: string
+  isIndividualTrack?: boolean
+  isExhaustedCandidates?: boolean
 }

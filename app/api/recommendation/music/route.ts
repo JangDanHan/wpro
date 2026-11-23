@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const weather = body.weather as ValidatedWeatherData | undefined
     const situation = body.situation as string | undefined
+    const excludedSongIds = (body.excludedSongIds || body.excludedTrackIds || []) as string[]
 
     if (!weather || typeof weather.temperature !== "number") {
       return NextResponse.json(
@@ -16,7 +17,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 제미나이 음악 검색어 생성 및 YouTube Data API 검색 (단계별 시간 배분 및 클라이언트 요청 취소 전파)
-    const result = await getRecommendedMusicWithTiming(weather, situation || null, request.signal)
+    const result = await getRecommendedMusicWithTiming(
+      weather,
+      situation || null,
+      request.signal,
+      excludedSongIds,
+    )
 
     if (!result.music) {
       return NextResponse.json(

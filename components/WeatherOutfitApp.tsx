@@ -30,6 +30,7 @@ export function WeatherOutfitApp() {
     music,
     musicErrorMessage,
     retryMusic,
+    fetchNextMusicTrack,
     timings,
     selectRegion,
     applySituation,
@@ -148,6 +149,8 @@ export function WeatherOutfitApp() {
               musicState={musicState}
               errorMessage={musicErrorMessage}
               onRetry={retryMusic}
+              onNextTrack={fetchNextMusicTrack}
+              isFetchingNextTrack={musicState === "loading"}
             />
           </div>
         )}
