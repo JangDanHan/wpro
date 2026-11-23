@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import { OutfitRecommendation, ValidatedWeatherData } from "@/lib/domain/types"
-import { FIXED_DISCLAIMER } from "@/lib/domain/outfit"
+import { FIXED_DISCLAIMER, getCategorizedOutfit } from "@/lib/domain/outfit"
 import { getOutfitRecommendations } from "@/lib/domain/outfit-catalog"
 import { selectIndividualTrack, TrackItem } from "@/lib/domain/music-catalog"
 
@@ -151,10 +151,17 @@ JSON 스키마:
           cleanSituation,
         )
 
+        const categorizedOutfit = getCategorizedOutfit(
+          weather.temperature,
+          weather.precipitationType,
+          cleanSituation,
+        )
+
         return {
           title: "지금 참고할 옷차림",
           temperature: weather.temperature,
           basicOutfit: parsed.basicOutfit,
+          categorizedOutfit,
           precipitationNotice: parsed.precipitationNotice || null,
           reason: parsed.reason,
           fixedDisclaimer: FIXED_DISCLAIMER,
