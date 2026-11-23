@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { useWeatherRecommendation } from "@/hooks/useWeatherRecommendation"
 import { HeaderSection } from "@/components/weather/HeaderSection"
 import { RegionSelector } from "@/components/weather/RegionSelector"
@@ -41,9 +42,20 @@ export function WeatherOutfitApp() {
 
   const currentDisplayName = weather?.cityName || selectedRegionLabel || undefined
   const hasResult = (state === "success" || state === "partial") && weather && recommendation
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   const handleApplySituation = (newSituation: string) => {
     applySituation(newSituation)
+  }
+
+  // 상황 적용과 동시에 추천 즉시 실행 및 결과 영역으로 부드러운 스크롤 이동
+  const handleApplyAndExecute = async (newSituation: string) => {
+    await executeRecommendation(newSituation)
+    setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+    }, 150)
   }
 
   return (
@@ -65,6 +77,7 @@ export function WeatherOutfitApp() {
         <SituationInput
           situation={situation}
           onApplySituation={handleApplySituation}
+          onApplyAndExecute={handleApplyAndExecute}
           isFetching={isFetching}
           hasSelectedRegion={Boolean(selectedRegionId)}
         />
@@ -118,7 +131,7 @@ export function WeatherOutfitApp() {
 
         {/* 6. 추천 결과 표시 (날씨 카드 + 상품 중심 옷차림 추천 카드 + 체크리스트 + 음악 카드) */}
         {hasResult && (
-          <div className="space-y-4 animate-in fade-in-50 duration-300">
+          <div ref={resultsRef} className="space-y-4 animate-in fade-in-50 duration-300">
             {/* 소요 시간 지표 */}
             {timings.weatherMs !== null && (
               <div className="flex items-center justify-between px-3 py-1 bg-zinc-100/70 dark:bg-zinc-800/60 rounded-lg text-[10px] text-zinc-500 font-mono">

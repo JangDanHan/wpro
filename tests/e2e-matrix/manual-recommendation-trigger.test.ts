@@ -93,4 +93,61 @@ describe("수동 추천받기 버튼 및 지역 선택 동작 검증", () => {
     expect(triggeredRegionId).toBe("부산광역시-해운대구-우동")
     expect(triggeredSituation).toBe("야외 데이트")
   })
+
+  it("상황 맞춤 AI 코디의 '적용' 버튼 클릭 시 즉시 최신 상황과 지역으로 추천이 실행된다", () => {
+    let triggeredRegion: string | null = null
+    let triggeredSituation: string | null = null
+    let isFetching = false
+    let validationError: string | null = null
+    let situationState = ""
+
+    const executeRecommendation = (customSituation?: string, regionId?: string | null) => {
+      if (isFetching) return "BLOCKED_FETCHING"
+
+      const targetSit = customSituation !== undefined ? customSituation : situationState
+      if (customSituation !== undefined) {
+        situationState = customSituation
+      }
+
+      if (!regionId) {
+        validationError = "지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)"
+        return "BLOCKED_REGION"
+      }
+
+      validationError = null
+      isFetching = true
+      triggeredRegion = regionId
+      triggeredSituation = targetSit
+      return "SUCCESS"
+    }
+
+    // 1. 지역 미선택 상태에서 '적용' 클릭 시: 지역 선택 안내 발생 및 상황 입력값은 유지
+    const inputVal = "추위를 많이 타서 따뜻하게 입고 싶어"
+    const res1 = executeRecommendation(inputVal, null)
+    expect(res1).toBe("BLOCKED_REGION")
+    expect(validationError).toContain("지역을 먼저 선택해 주세요")
+    expect(situationState).toBe(inputVal) // 입력한 상황은 유지됨
+    expect(triggeredRegion).toBeNull()
+
+    // 2. 지역 선택 완료 후 '적용' 클릭 시: 아래 버튼 누를 필요 없이 즉시 추천 실행
+    const selectedRegion = "서울특별시-종로구-사직동"
+    isFetching = false
+    const res2 = executeRecommendation(inputVal, selectedRegion)
+    expect(res2).toBe("SUCCESS")
+    expect(triggeredRegion).toBe("서울특별시-종로구-사직동")
+    expect(triggeredSituation).toBe(inputVal)
+    expect(validationError).toBeNull()
+
+    // 3. 실행 중 중복 클릭 방지
+    const res3 = executeRecommendation("상황 변경", selectedRegion)
+    expect(res3).toBe("BLOCKED_FETCHING")
+    expect(triggeredSituation).toBe(inputVal) // 변경 차단
+
+    // 4. 완료 후 상황 수정 후 다시 '적용' 시 최신 내용으로 즉시 갱신
+    isFetching = false
+    const updatedSituation = "비 오는 날 실내 미팅"
+    const res4 = executeRecommendation(updatedSituation, selectedRegion)
+    expect(res4).toBe("SUCCESS")
+    expect(triggeredSituation).toBe(updatedSituation)
+  })
 })

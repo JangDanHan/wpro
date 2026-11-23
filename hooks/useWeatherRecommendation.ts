@@ -63,7 +63,7 @@ export interface UseWeatherRecommendationReturn {
   applySituation: (newSituation: string) => void
   resetSelection: () => void
   refresh: (customSituation?: string) => void
-  executeRecommendation: () => Promise<void>
+  executeRecommendation: (customSituation?: string) => Promise<void>
 }
 
 export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
@@ -549,21 +549,32 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   }, [])
 
   /**
-   * '추천받기' 버튼 클릭 핸들러 (요구사항: 필수 입력 검증 후 날씨 조회 실행, 중복 방지)
+   * '추천받기' 및 상황 '적용' 버튼 클릭 핸들러 (요구사항: 최신 상황 반영 및 즉시 날씨·옷차림 조회 실행, 중복 방지)
    */
-  const executeRecommendation = useCallback(async () => {
-    if (state === "loading") {
-      return
-    }
+  const executeRecommendation = useCallback(
+    async (customSituation?: string) => {
+      if (state === "loading") {
+        return
+      }
 
-    if (!selectedRegionId) {
-      setValidationError("지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)")
-      return
-    }
+      const targetSituation =
+        customSituation !== undefined ? customSituation : situation
+      if (customSituation !== undefined) {
+        setSituation(customSituation)
+      }
 
-    setValidationError(null)
-    await fetchWeatherForRegion(selectedRegionId, situation)
-  }, [fetchWeatherForRegion, selectedRegionId, situation, state])
+      if (!selectedRegionId) {
+        setValidationError(
+          "지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)",
+        )
+        return
+      }
+
+      setValidationError(null)
+      await fetchWeatherForRegion(selectedRegionId, targetSituation)
+    },
+    [fetchWeatherForRegion, selectedRegionId, situation, state],
+  )
 
   /**
    * AI 옷차림 추천만 단독 재시도
