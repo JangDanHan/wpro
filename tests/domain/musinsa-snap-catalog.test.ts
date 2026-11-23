@@ -31,7 +31,7 @@ describe("날씨 맞춤 코디 보드 카탈로그 (Outfit Board Catalog)", () =
   it("모든 상품 사진은 실제 존재하는 로컬 파일이어야 하며, 이미지 로딩 실패가 발생하지 않아야 한다", () => {
     for (const post of MUSINSA_SNAP_POSTS) {
       for (const item of post.productItems) {
-        expect(item.photoUrl).toMatch(/^\/images\/products\//)
+        expect(item.photoUrl).toMatch(/^\/images\/(products|collage)\//)
         const localPath = path.join(process.cwd(), "public", item.photoUrl)
         expect(fs.existsSync(localPath)).toBe(true)
       }

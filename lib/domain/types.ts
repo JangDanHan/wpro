@@ -95,13 +95,21 @@ export interface ValidationResult {
 
 export interface ProductItem {
   id: string
-  category: "outer" | "top" | "bottom" | "shoes" | "accessory"
-  categoryLabel: string // "외투", "상의", "하의", "신발"
-  name: string // 예: "차콜 반집업 니트", "연청 와이드 데님"
-  photoUrl: string // 밝은 스튜디오 배경의 단독 상품 사진
+  category: "outer" | "top" | "bottom" | "shoes" | "accessory" | "headwear" | "bag"
+  categoryLabel: string // "외투", "상의", "하의", "신발", "모자", "가방", "소품"
+  name: string // 예: "블랙 골지 하이넥 니트", "연청 와이드 데님"
+  photoUrl: string // 투명 배경 누끼 단독 상품 사진
   material?: string
   thickness?: string
   description?: string
+  collageStyle?: {
+    top?: string
+    left?: string
+    right?: string
+    bottom?: string
+    width?: string
+    zIndex?: number
+  }
 }
 
 export interface OutfitRecommendation {

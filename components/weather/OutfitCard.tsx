@@ -8,7 +8,6 @@ import {
   RefreshCw,
   ExternalLink,
   X,
-  Info,
   CheckCircle2,
 } from "lucide-react"
 
@@ -53,7 +52,7 @@ export function OutfitCard({
       productItems: recommendation.productItems || [],
     })
 
-    // 2. 대체 코디들 (완성된 한 벌 단위, 아이템 혼합 없음)
+    // 2. 대체 코디들 (완성된 한 벌 단위 콜라주)
     if (Array.isArray(recommendation.alternativeOutfits)) {
       for (const alt of recommendation.alternativeOutfits) {
         list.push({
@@ -88,7 +87,7 @@ export function OutfitCard({
   const safeIndex = currentIndex % (filteredOutfits.length || 1)
   const currentOutfit = filteredOutfits[safeIndex] || allOutfits[0]
 
-  // '다른 코디 보기' 핸들러 (보드 전체가 새로운 조합으로 전환)
+  // '다른 코디 보기' 핸들러 (콜라주 전체가 새로운 조합으로 전환)
   const handleNextOutfit = () => {
     setCurrentIndex((prev) => (prev + 1) % filteredOutfits.length)
   }
@@ -98,12 +97,6 @@ export function OutfitCard({
     setSelectedStyleFilter(style)
     setCurrentIndex(0)
   }
-
-  // 코디 아이템 분리 (외투, 상의, 하의, 신발)
-  const outerProduct = currentOutfit.productItems.find((p) => p.category === "outer")
-  const topProduct = currentOutfit.productItems.find((p) => p.category === "top")
-  const bottomProduct = currentOutfit.productItems.find((p) => p.category === "bottom")
-  const shoesProduct = currentOutfit.productItems.find((p) => p.category === "shoes")
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
@@ -116,14 +109,14 @@ export function OutfitCard({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                날씨 맞춤 완성 코디
+                날씨 맞춤 코디 콜라주
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/60">
-                코디 보드
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700">
+                스타일링 콜라주
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              오늘 날씨와 일정에 어울리는 한 벌 구성을 플랫레이로 확인해보세요
+              오늘 날씨에 어울리는 한 벌의 구성을 패션 콜라주로 확인해보세요
             </p>
           </div>
         </div>
@@ -186,92 +179,59 @@ export function OutfitCard({
         </button>
       </div>
 
-      {/* 3. [핵심 요구사항] 하나의 완성된 코디 보드 (Flat Lay Canvas) */}
-      {/* 4개의 개별 사각형 테두리를 완전히 제거하고 하나의 밝은 단일 캔버스 배경 안에 배치 */}
-      <div className="relative w-full rounded-3xl bg-[#f8fafc] dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/60 p-5 sm:p-7 flex flex-col items-center justify-center min-h-[460px] sm:min-h-[500px] shadow-inner select-none overflow-hidden">
+      {/* 3. [핵심 요구사항] 흰 배경 한 장에 누끼 상품들을 함께 배치한 패션 코디 콜라주 */}
+      {/* 모바일에서도 상대적 위치와 비율을 유지하며 전체가 축소되도록 aspect-ratio 캔버스 적용 */}
+      <div className="relative w-full rounded-3xl bg-white border border-zinc-200/90 shadow-sm overflow-hidden select-none">
         
-        {/* 플랫레이 실루엣 컨테이너 (사람·마네킹 없이 오직 옷과 신발의 형태와 비율만 표현) */}
-        <div className="relative w-full max-w-[360px] flex flex-col items-center py-2">
-          
-          {/* [상단 영역]: 아우터 & 상의 */}
-          <div className="relative w-full flex items-center justify-center h-[175px] sm:h-[195px]">
-            {outerProduct && (
+        {/* 순백색 콜라주 캔버스 (472:865 비율, 모바일·PC 동일 구도 보장) */}
+        <div className="relative w-full aspect-[472/840] max-h-[640px] mx-auto overflow-hidden">
+          {currentOutfit.productItems.map((product) => {
+            const cs = product.collageStyle || {}
+
+            return (
               <div
-                onClick={() => setSelectedProductDetail(outerProduct)}
-                className={`absolute transition-transform duration-300 hover:scale-105 cursor-pointer ${
-                  topProduct
-                    ? "left-2 sm:left-4 w-[52%] max-w-[180px] z-10 hover:z-30"
-                    : "w-[72%] max-w-[240px] z-10"
-                }`}
-                title={`${outerProduct.name} (클릭하여 상세 정보 보기)`}
+                key={product.id}
+                onClick={() => setSelectedProductDetail(product)}
+                style={{
+                  position: "absolute",
+                  top: cs.top || "20%",
+                  left: cs.left,
+                  right: cs.right,
+                  bottom: cs.bottom,
+                  width: cs.width || "45%",
+                  zIndex: cs.zIndex || 10,
+                }}
+                className="group cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95"
+                title={`${product.categoryLabel}: ${product.name} (클릭하여 상세 정보 보기)`}
               >
+                {/* 누끼 상품 이미지 (배경 없음, 사각형 테두리 없음, 완전 투명) */}
                 <img
-                  src={outerProduct.photoUrl}
-                  alt={outerProduct.name}
-                  className="w-full h-[170px] sm:h-[190px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
+                  src={product.photoUrl}
+                  alt={product.name}
+                  className="w-full h-auto object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.06)] group-hover:drop-shadow-[0_4px_16px_rgba(0,0,0,0.14)] transition-all pointer-events-auto"
+                  loading="lazy"
                 />
+
+                {/* 마우스 호버 시 가벼운 미니 라벨 툴팁 */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap">
+                  <span className="px-2 py-0.5 rounded-md bg-zinc-900/85 text-white text-[10px] font-medium shadow-md">
+                    {product.name}
+                  </span>
+                </div>
               </div>
-            )}
-
-            {topProduct && (
-              <div
-                onClick={() => setSelectedProductDetail(topProduct)}
-                className={`transition-transform duration-300 hover:scale-105 cursor-pointer ${
-                  outerProduct
-                    ? "relative ml-auto right-2 sm:right-4 w-[46%] max-w-[165px] z-20 hover:z-30"
-                    : "w-[62%] max-w-[210px] z-20"
-                }`}
-                title={`${topProduct.name} (클릭하여 상세 정보 보기)`}
-              >
-                <img
-                  src={topProduct.photoUrl}
-                  alt={topProduct.name}
-                  className="w-full h-[160px] sm:h-[180px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* [중단 영역]: 하의 (바지) - 상의 바로 아래에 실루엣이 자연스럽게 이어짐 */}
-          {bottomProduct && (
-            <div
-              onClick={() => setSelectedProductDetail(bottomProduct)}
-              className="w-[48%] max-w-[170px] -mt-3 sm:-mt-5 z-15 hover:z-30 transition-transform duration-300 hover:scale-105 cursor-pointer"
-              title={`${bottomProduct.name} (클릭하여 상세 정보 보기)`}
-            >
-              <img
-                src={bottomProduct.photoUrl}
-                alt={bottomProduct.name}
-                className="w-full h-[175px] sm:h-[200px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
-              />
-            </div>
-          )}
-
-          {/* [하단 영역]: 신발 - 바지 밑단 아래에 가지런히 배치 */}
-          {shoesProduct && (
-            <div
-              onClick={() => setSelectedProductDetail(shoesProduct)}
-              className="w-[36%] max-w-[130px] -mt-2 sm:-mt-3 z-20 hover:z-30 transition-transform duration-300 hover:scale-105 cursor-pointer"
-              title={`${shoesProduct.name} (클릭하여 상세 정보 보기)`}
-            >
-              <img
-                src={shoesProduct.photoUrl}
-                alt={shoesProduct.name}
-                className="w-full h-[80px] sm:h-[90px] object-contain drop-shadow-sm filter transition-all hover:drop-shadow-md"
-              />
-            </div>
-          )}
+            )
+          })}
         </div>
 
-        {/* 캔버스 하단 클릭 안내 팁 (간결한 텍스트) */}
-        <div className="mt-2 text-center">
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-            상품을 누르면 소재와 두께감 등 상세 정보를 확인할 수 있습니다
-          </span>
+        {/* 캔버스 하단 안내 문구 */}
+        <div className="py-2.5 bg-zinc-50/80 border-t border-zinc-100 text-center">
+          <p className="text-[10px] text-zinc-500 font-medium">
+            각 상품을 누르면 사진과 정확히 일치하는 상세 정보를 확인할 수 있습니다
+          </p>
         </div>
       </div>
 
-      {/* 4. 코디 정보 영역: 보드 아래에 간결하고 명확하게 표시 (이미지 위 겹침 배제) */}
+      {/* 4. 코디 정보 영역: 콜라주 아래에 간결하고 정확하게 표시 (이미지 위 겹침 배제) */}
       <div className="bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-3">
         {/* 코디 이름 & 스타일 */}
         <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60 dark:border-zinc-700/60">
@@ -283,12 +243,12 @@ export function OutfitCard({
           </span>
         </div>
 
-        {/* 구성: 아우터 + 상의 + 하의 + 신발 */}
+        {/* 구성 상품 목록 */}
         <div className="space-y-1">
           <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
-            코디 구성
+            구성 상품
           </span>
-          <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+          <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-relaxed">
             {currentOutfit.clothingItems}
           </p>
         </div>
@@ -318,12 +278,13 @@ export function OutfitCard({
         </div>
       </div>
 
-      {/* 5. 상품 상세 모달 */}
+      {/* 5. [핵심] 누른 상품과 100% 동일한 ID와 데이터를 사용하는 상세 모달 (사진 불일치 원천 차단) */}
       {selectedProductDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-50">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            {/* 카테고리 배지 & 닫기 버튼 */}
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <span className="px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">
+              <span className="px-2.5 py-1 rounded-md bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">
                 {selectedProductDetail.categoryLabel}
               </span>
               <button
@@ -335,7 +296,8 @@ export function OutfitCard({
               </button>
             </div>
 
-            <div className="aspect-square w-full bg-[#f8fafc] dark:bg-zinc-800 rounded-2xl flex items-center justify-center p-4">
+            {/* 상품 단독 사진: 누끼 투명 처리, 사각형 흰 가림 흔적 없음 */}
+            <div className="aspect-square w-full bg-zinc-50 dark:bg-zinc-800/80 rounded-2xl flex items-center justify-center p-4">
               <img
                 src={selectedProductDetail.photoUrl}
                 alt={selectedProductDetail.name}
@@ -343,6 +305,7 @@ export function OutfitCard({
               />
             </div>
 
+            {/* 상품명 및 상세 설명 (동일 ID 단일 데이터 소스) */}
             <div className="space-y-2">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 {selectedProductDetail.name}
@@ -352,20 +315,12 @@ export function OutfitCard({
                   {selectedProductDetail.description}
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-zinc-500 border-t border-zinc-100 dark:border-zinc-800">
-                {selectedProductDetail.material && (
-                  <div>
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">소재: </span>
-                    <span>{selectedProductDetail.material}</span>
-                  </div>
-                )}
-                {selectedProductDetail.thickness && (
-                  <div>
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">두께: </span>
-                    <span>{selectedProductDetail.thickness}</span>
-                  </div>
-                )}
-              </div>
+              {selectedProductDetail.material && (
+                <div className="pt-2 text-[11px] text-zinc-500 border-t border-zinc-100 dark:border-zinc-800">
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">소재: </span>
+                  <span>{selectedProductDetail.material}</span>
+                </div>
+              )}
             </div>
 
             <button
