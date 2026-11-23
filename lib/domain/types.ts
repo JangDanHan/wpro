@@ -67,6 +67,7 @@ export interface ValidatedWeatherData {
   cityId: CityId
   cityName: string
   temperature: number
+  apparentTemp?: number
   weatherDescription: string | null // null means '상태 정보 없음' (EX-10)
   precipitationType: PrecipitationType
   rainfallAmount: number | null // null means '강수량 정보 없음' (EX-08)
