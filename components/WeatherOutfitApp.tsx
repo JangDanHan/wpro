@@ -24,8 +24,10 @@ export function WeatherOutfitApp() {
     recommendation,
     errorMessage,
     isFetching,
+    isWeatherLoading,
     aiState,
     aiErrorMessage,
+    isSituationLoading,
     retryAiOutfit,
     musicState,
     music,
@@ -35,6 +37,7 @@ export function WeatherOutfitApp() {
     timings,
     selectRegion,
     applySituation,
+    applySituationAndExecute,
     resetSelection,
     refresh,
     executeRecommendation,
@@ -48,14 +51,9 @@ export function WeatherOutfitApp() {
     applySituation(newSituation)
   }
 
-  // 상황 적용과 동시에 추천 즉시 실행 및 결과 영역으로 부드러운 스크롤 이동
+  // 상황 적용 시 상황 맞춤 AI 추천만 독립 실행 (하단 전체 로딩이나 화면 강제 이동 없음)
   const handleApplyAndExecute = async (newSituation: string) => {
-    await executeRecommendation(newSituation)
-    setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
-      }
-    }, 150)
+    await applySituationAndExecute(newSituation)
   }
 
   return (
@@ -70,7 +68,7 @@ export function WeatherOutfitApp() {
           selectedRegionLabel={selectedRegionLabel}
           onSelectRegion={(regionId, label) => selectRegion(regionId, label)}
           onResetSelection={resetSelection}
-          isFetching={isFetching}
+          isFetching={isWeatherLoading}
         />
 
         {/* 3. 상황 맞춤 AI 코디 입력란 (선택 사항) */}
@@ -78,7 +76,7 @@ export function WeatherOutfitApp() {
           situation={situation}
           onApplySituation={handleApplySituation}
           onApplyAndExecute={handleApplyAndExecute}
-          isFetching={isFetching}
+          isSituationLoading={isSituationLoading}
           hasSelectedRegion={Boolean(selectedRegionId)}
         />
 
@@ -87,17 +85,17 @@ export function WeatherOutfitApp() {
           <button
             type="button"
             onClick={() => executeRecommendation()}
-            disabled={isFetching}
+            disabled={isWeatherLoading}
             className={`
               w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white shadow-md transition-all flex items-center justify-center gap-2
               ${
-                isFetching
+                isWeatherLoading
                   ? "bg-sky-400 cursor-not-allowed opacity-80"
                   : "bg-sky-600 hover:bg-sky-700 active:scale-[0.99] cursor-pointer shadow-sky-500/20"
               }
             `}
           >
-            {isFetching ? (
+            {isWeatherLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>날씨 & 옷차림 불러오는 중...</span>

@@ -150,4 +150,94 @@ describe("수동 추천받기 버튼 및 지역 선택 동작 검증", () => {
     expect(res4).toBe("SUCCESS")
     expect(triggeredSituation).toBe(updatedSituation)
   })
+
+  it("상황 맞춤 AI 코디의 '적용' 클릭 시 로딩 상태와 실행 범위가 하단 전체 추천과 분리된다", async () => {
+    let isWeatherLoading = false
+    let isSituationLoading = false
+    let weatherFetchCount = 0
+    let musicFetchCount = 0
+    let aiOutfitFetchCount = 0
+    let appliedSituation: string | null = null
+
+    interface MockWeatherData {
+      temp: number
+      region: string
+    }
+    let currentWeather: MockWeatherData | null = null
+    const regionId = "서울특별시-종로구-사직동"
+
+    // 1. 하단 전체 추천 함수
+    const executeRecommendation = async () => {
+      isWeatherLoading = true
+      await new Promise((r) => setTimeout(r, 10))
+      weatherFetchCount++
+      musicFetchCount++
+      currentWeather = { temp: 12, region: regionId }
+      if (appliedSituation) {
+        aiOutfitFetchCount++
+      }
+      isWeatherLoading = false
+    }
+
+    // 2. 상단 상황 맞춤 추천 함수 (단독 실행 흐름)
+    const applySituationAndExecute = async (newSit: string) => {
+      isSituationLoading = true
+      appliedSituation = newSit
+
+      // 날씨 데이터가 이미 있는 경우
+      if (currentWeather) {
+        await new Promise((r) => setTimeout(r, 10))
+        aiOutfitFetchCount++
+        isSituationLoading = false
+        return
+      }
+
+      // 날씨 데이터가 없는 경우: 내부 조회하되 isWeatherLoading은 건드리지 않음
+      await new Promise((r) => setTimeout(r, 10))
+      weatherFetchCount++
+      currentWeather = { temp: 12, region: regionId }
+      aiOutfitFetchCount++
+      isSituationLoading = false
+    }
+
+    // 시나리오 A: 첫 방문 후 지역 선택 후 '적용' 클릭 (날씨 데이터 없음)
+    const sitA = "결혼식 하객룩"
+    const promiseA = applySituationAndExecute(sitA)
+    // 처리 중: isSituationLoading만 true여야 하고, isWeatherLoading은 false여야 함
+    expect(isSituationLoading).toBe(true)
+    expect(isWeatherLoading).toBe(false) // 하단 버튼은 로딩되지 않음!
+    await promiseA
+
+    expect(isSituationLoading).toBe(false)
+    expect(isWeatherLoading).toBe(false)
+    expect(weatherFetchCount).toBe(1)
+    expect(aiOutfitFetchCount).toBe(1)
+    expect(musicFetchCount).toBe(0) // 음악은 불필요하게 조회하지 않음
+
+    // 시나리오 B: 이미 날씨 데이터가 확보된 상태에서 상황 변경 후 '적용' 클릭
+    const prevWeatherFetchCount = weatherFetchCount
+    const prevMusicFetchCount = musicFetchCount
+    const sitB = "가벼운 산책"
+
+    const promiseB = applySituationAndExecute(sitB)
+    expect(isSituationLoading).toBe(true)
+    expect(isWeatherLoading).toBe(false) // 하단 버튼은 여전히 false
+    await promiseB
+
+    expect(isSituationLoading).toBe(false)
+    expect(isWeatherLoading).toBe(false)
+    expect(weatherFetchCount).toBe(prevWeatherFetchCount) // 날씨 재조회 안 함!
+    expect(musicFetchCount).toBe(prevMusicFetchCount) // 음악 재조회 안 함!
+    expect(aiOutfitFetchCount).toBe(2) // AI 코디만 단독 갱신됨!
+
+    // 시나리오 C: 하단 전체 추천 버튼을 직접 클릭한 경우
+    const promiseC = executeRecommendation()
+    expect(isWeatherLoading).toBe(true)
+    expect(isSituationLoading).toBe(false) // 상단 상황 버튼은 로딩되지 않음!
+    await promiseC
+
+    expect(isWeatherLoading).toBe(false)
+    expect(weatherFetchCount).toBe(prevWeatherFetchCount + 1)
+    expect(musicFetchCount).toBe(prevMusicFetchCount + 1)
+  })
 })

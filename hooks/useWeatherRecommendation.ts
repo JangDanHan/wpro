@@ -41,10 +41,12 @@ export interface UseWeatherRecommendationReturn {
   recommendation: OutfitRecommendation | null
   errorMessage: string | null
   isFetching: boolean
+  isWeatherLoading: boolean
 
   // 2. AI 맞춤 추천 상태 (비동기 독립 분리)
   aiState: SubFeatureState
   aiErrorMessage: string | null
+  isSituationLoading: boolean
   retryAiOutfit: () => void
 
   // 3. 음악 추천 상태 (비동기 독립 분리)
@@ -61,6 +63,7 @@ export interface UseWeatherRecommendationReturn {
   selectCity: (regionId: string, label?: string, customSituation?: string) => void
   selectRegion: (regionId: string, label?: string, customSituation?: string) => void
   applySituation: (newSituation: string) => void
+  applySituationAndExecute: (newSituation: string) => Promise<void>
   resetSelection: () => void
   refresh: (customSituation?: string) => void
   executeRecommendation: (customSituation?: string) => Promise<void>
@@ -82,6 +85,11 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   const [aiState, setAiState] = useState<SubFeatureState>("idle")
   const [aiRecommendation, setAiRecommendation] = useState<OutfitRecommendation | null>(null)
   const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(null)
+  const [isSituationInternalLoading, setIsSituationInternalLoading] = useState<boolean>(false)
+
+  // 로딩 상태 분리: 상황 맞춤 로딩 vs 전체 날씨 로딩
+  const isSituationLoading = isSituationInternalLoading || aiState === "loading"
+  const isWeatherLoading = state === "loading"
 
   // 3. 음악 추천 상태 (별도 요청)
   const [musicState, setMusicState] = useState<SubFeatureState>("idle")
@@ -549,7 +557,84 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
   }, [])
 
   /**
-   * '추천받기' 및 상황 '적용' 버튼 클릭 핸들러 (요구사항: 최신 상황 반영 및 즉시 날씨·옷차림 조회 실행, 중복 방지)
+   * 상황 맞춤 AI 코디 단독 실행 핸들러 (실행 흐름, 로딩, 오류, 결과 상태 분리)
+   * - 이미 날씨 데이터가 있는 경우: 날씨/음악 재조회 없이 AI 맞춤 코디만 단독 실행
+   * - 날씨 데이터가 아직 없는 경우: 내부적으로 날씨 조회하되 로딩은 AI 영역(isSituationLoading)에서만 표시
+   * - 하단 '날씨 & 옷차림 추천받기' 버튼 상태나 화면 전체에 영향을 주지 않음
+   */
+  const applySituationAndExecute = useCallback(
+    async (newSituation: string) => {
+      const trimmedSituation = (newSituation || "").trim()
+      setSituation(newSituation)
+
+      // 1. 지역 선택 검증
+      if (!selectedRegionId) {
+        setValidationError(
+          "지역을 먼저 선택해 주세요. (시·도, 시·군·구, 읍·면·동 모두 선택)",
+        )
+        return
+      }
+      setValidationError(null)
+
+      // 2. 이미 유효한 날씨 데이터가 있는 경우: 날씨/음악 재조회 없이 AI 맞춤 코디만 단독 실행!
+      if (weather) {
+        if (!trimmedSituation) {
+          // 상황이 비워진 경우 AI 추천 해제하고 기본 추천으로 복귀
+          setAiRecommendation(null)
+          setAiState("idle")
+          setAiErrorMessage(null)
+          return
+        }
+        await fetchAiOutfit(weather, trimmedSituation, activeRequestIdRef.current, selectedRegionId)
+        return
+      }
+
+      // 3. 필요한 날씨 데이터가 없어 내부 조회가 필요한 경우:
+      // 하단 전체 추천 버튼(isWeatherLoading)이나 화면 전체를 로딩/비활성화하지 않고
+      // AI 코디 영역(isSituationLoading) 안에서만 로딩을 표시하며 내부 조회 실행!
+      setIsSituationInternalLoading(true)
+      try {
+        const response = await fetch(`/api/weather?regionId=${encodeURIComponent(selectedRegionId)}`, {
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          setAiState("error")
+          setAiErrorMessage(errData.error || "날씨 정보를 불러오지 못해 맞춤 코디를 추천할 수 없습니다.")
+          setIsSituationInternalLoading(false)
+          return
+        }
+
+        const payload = await response.json()
+        const fetchedWeather = payload.weather as ValidatedWeatherData
+        const fetchedRecommendation = payload.recommendation as OutfitRecommendation
+
+        setWeather(fetchedWeather)
+        setBasicRecommendation(fetchedRecommendation)
+        setState(
+          fetchedWeather.weatherDescription === null || fetchedWeather.rainfallAmount === null
+            ? "partial"
+            : "success",
+        )
+        activeRegionIdRef.current = selectedRegionId
+
+        // AI 맞춤 코디 호출
+        if (trimmedSituation) {
+          await fetchAiOutfit(fetchedWeather, trimmedSituation, activeRequestIdRef.current, selectedRegionId)
+        }
+      } catch (err: any) {
+        setAiState("error")
+        setAiErrorMessage("날씨 조회 중 통신 오류가 발생했습니다.")
+      } finally {
+        setIsSituationInternalLoading(false)
+      }
+    },
+    [fetchAiOutfit, selectedRegionId, weather],
+  )
+
+  /**
+   * '추천받기' 버튼 클릭 핸들러 (전체 날씨·기본 옷차림·음악 일괄 조회)
    */
   const executeRecommendation = useCallback(
     async (customSituation?: string) => {
@@ -641,10 +726,12 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     weather,
     recommendation: activeRecommendation,
     errorMessage,
-    isFetching: state === "loading",
+    isFetching: isWeatherLoading,
+    isWeatherLoading,
 
     aiState,
     aiErrorMessage,
+    isSituationLoading,
     retryAiOutfit,
 
     musicState,
@@ -658,6 +745,7 @@ export function useWeatherRecommendation(): UseWeatherRecommendationReturn {
     selectCity: selectRegion,
     selectRegion,
     applySituation,
+    applySituationAndExecute,
     resetSelection,
     refresh,
     executeRecommendation,

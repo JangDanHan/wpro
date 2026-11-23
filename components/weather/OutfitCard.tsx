@@ -9,6 +9,7 @@ import {
   User,
   Sparkles,
   Layers,
+  Loader2,
 } from "lucide-react"
 
 interface OutfitCardProps {
@@ -24,6 +25,9 @@ export function OutfitCard({
   recommendation,
   onRefresh,
   isFetching,
+  aiState,
+  aiErrorMessage,
+  onRetryAi,
 }: OutfitCardProps) {
   const cat = recommendation.categorizedOutfit
 
@@ -63,12 +67,41 @@ export function OutfitCard({
         </button>
       </div>
 
-      {/* 2. 사용자 상황 반영 안내 */}
-      {recommendation.situation && (
+      {/* 2. 상황 맞춤 AI 추천 로딩 상태 표시 (하단 전체 버튼과 분리되어 이곳에만 표시) */}
+      {aiState === "loading" && (
+        <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-2xl text-xs text-amber-900 dark:text-amber-200 animate-pulse">
+          <Loader2 className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-spin shrink-0" />
+          <span className="font-semibold">입력하신 상황에 맞춰 옷차림을 분석하고 있어요...</span>
+        </div>
+      )}
+
+      {/* 3. 상황 맞춤 추천 오류 및 단독 재시도 */}
+      {aiState === "error" && (
+        <div className="flex items-center justify-between p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-900/60 rounded-2xl text-xs text-red-900 dark:text-red-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="font-medium">
+              {aiErrorMessage || "상황 맞춤 추천을 불러오지 못했습니다. 기본 옷차림을 표시합니다."}
+            </span>
+          </div>
+          {onRetryAi && (
+            <button
+              type="button"
+              onClick={onRetryAi}
+              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-100 rounded-lg font-semibold text-[11px] cursor-pointer"
+            >
+              다시 시도
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 4. 사용자 상황 반영 안내 (로딩 중이 아닐 때) */}
+      {recommendation.situation && aiState !== "loading" && (
         <div className="flex items-center gap-2 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl text-xs text-amber-900 dark:text-amber-200">
-          <User className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
+          <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
           <div className="flex-1">
-            <span className="font-bold text-amber-800 dark:text-amber-300">반영된 일정·상황: </span>
+            <span className="font-bold text-amber-800 dark:text-amber-300">상황 맞춤 코디 반영: </span>
             <span className="font-medium">{recommendation.situation}</span>
           </div>
         </div>

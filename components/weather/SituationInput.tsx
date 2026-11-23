@@ -7,7 +7,8 @@ interface SituationInputProps {
   situation: string
   onApplySituation: (situation: string) => void
   onApplyAndExecute: (situation: string) => Promise<void> | void
-  isFetching: boolean
+  isSituationLoading?: boolean
+  isFetching?: boolean
   hasSelectedRegion: boolean
 }
 
@@ -23,10 +24,13 @@ export function SituationInput({
   situation,
   onApplySituation,
   onApplyAndExecute,
+  isSituationLoading,
   isFetching,
   hasSelectedRegion,
 }: SituationInputProps) {
   const [inputValue, setInputValue] = useState(situation)
+  // 상황 맞춤 추천 단독 로딩 상태 (하단 전체 날씨 로딩과 분리)
+  const isLoading = isSituationLoading ?? isFetching ?? false
 
   // 부모의 situation이 외부에서 리셋되거나 바뀔 때 동기화
   useEffect(() => {
@@ -38,17 +42,17 @@ export function SituationInput({
     onApplySituation(val)
   }
 
-  // '적용' 버튼 클릭 또는 엔터 키 제출 시 즉시 추천 실행
+  // '적용' 버튼 클릭 또는 엔터 키 제출 시 상황 맞춤 추천 즉시 실행
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (isFetching) return
+    if (isLoading) return
     const trimmed = inputValue.trim()
     onApplyAndExecute(trimmed)
   }
 
   // 빠른 태그 클릭 시에도 즉시 추천 실행
   const handleQuickTagClick = (tag: string) => {
-    if (isFetching) return
+    if (isLoading) return
     setInputValue(tag)
     onApplyAndExecute(tag)
   }
@@ -81,11 +85,11 @@ export function SituationInput({
           value={inputValue}
           onChange={(e) => handleChange(e.target.value)}
           placeholder="예: 추위를 많이 타고 오늘 면접이 있어"
-          disabled={isFetching}
+          disabled={isLoading}
           className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 pr-24 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
         />
         <div className="absolute right-1.5 flex items-center gap-1">
-          {inputValue && !isFetching && (
+          {inputValue && !isLoading && (
             <button
               type="button"
               onClick={handleClear}
@@ -98,18 +102,18 @@ export function SituationInput({
           )}
           <button
             type="submit"
-            disabled={isFetching}
+            disabled={isLoading}
             className={`
               inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-2xs transition-all cursor-pointer
               ${
-                isFetching
+                isLoading
                   ? "bg-amber-400 cursor-not-allowed opacity-80"
                   : "bg-amber-500 hover:bg-amber-600 active:scale-95 shadow-amber-500/20"
               }
             `}
             title="상황 맞춤 추천 즉시 실행"
           >
-            {isFetching ? (
+            {isLoading ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>추천 중…</span>
@@ -133,7 +137,7 @@ export function SituationInput({
           <button
             key={tag}
             type="button"
-            disabled={isFetching}
+            disabled={isLoading}
             onClick={() => handleQuickTagClick(tag)}
             className="text-[11px] px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300 border border-zinc-200/60 dark:border-zinc-700/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
           >
