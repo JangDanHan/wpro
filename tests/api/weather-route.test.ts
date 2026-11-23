@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { GET, getKmaBaseDateTime } from "@/app/api/weather/route"
+import { GET } from "@/app/api/weather/route"
+import { getKmaBaseDateTime } from "@/lib/domain/kma-date"
 import { NextRequest } from "next/server"
 
 describe("KMA Weather API Route Handler (기상청 단기예보 조회서비스 전국 연동)", () => {

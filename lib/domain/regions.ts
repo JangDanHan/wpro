@@ -74,7 +74,7 @@ export function getStep1List(): string[] {
 }
 
 /**
- * 2단계 (시·군·구) 목록 반환
+ * 2단계 (시·군·구) 목록 반환 (한국어 가나다순 정렬)
  */
 export function getStep2List(step1: string): string[] {
   const regions = loadAllKmaRegions()
@@ -84,11 +84,11 @@ export function getStep2List(step1: string): string[] {
       set.add(r.path[1])
     }
   }
-  return Array.from(set)
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"))
 }
 
 /**
- * 3단계 (읍·면·동) 목록 반환
+ * 3단계 (읍·면·동) 목록 반환 (한국어 가나다순 정렬)
  */
 export function getStep3List(
   step1: string,
@@ -133,7 +133,7 @@ export function getStep3List(
     }
   }
 
-  return results
+  return results.sort((a, b) => a.name.localeCompare(b.name, "ko"))
 }
 
 /**

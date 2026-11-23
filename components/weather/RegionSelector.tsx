@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 import { Search, MapPin, ChevronDown, Check, Loader2, X } from "lucide-react"
 
 interface RegionSelectorProps {
@@ -33,6 +33,288 @@ const QUICK_REGIONS = [
   { label: "제주", step1: "제주특별자치도" },
 ]
 
+/**
+ * 시군구 및 읍면동을 위한 검색 가능 드롭다운 컴포넌트
+ * - 한국어 가나다순(ㄱ→ㅎ) 정렬 보장
+ * - 검색어 필터링 및 가나다순 유지
+ * - 검색어 초기화 및 외부 클릭 닫기
+ * - 키보드(Arrow, Enter, Esc) 탐색 지원
+ * - 한글 입력 시 끊김 방지
+ */
+interface SearchableSelectProps {
+  id: string
+  label: string
+  placeholder: string
+  searchPlaceholder: string
+  value: string
+  displayValue?: string
+  options: { label: string; value: string }[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}
+
+function SearchableSelect({
+  id,
+  label,
+  placeholder,
+  searchPlaceholder,
+  value,
+  displayValue,
+  options,
+  onChange,
+  disabled = false,
+}: SearchableSelectProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  // 1. 한국어 가나다순(ㄱ→ㅎ) 정렬 (API 순서에 의존하지 않음, 안내 문구 제외)
+  const sortedOptions = useMemo(() => {
+    return [...options].sort((a, b) => a.label.localeCompare(b.label, "ko"))
+  }, [options])
+
+  // 2. 검색어 필터링 (가나다순 유지)
+  const filteredOptions = useMemo(() => {
+    const trimmed = search.trim().toLowerCase()
+    if (!trimmed) return sortedOptions
+    return sortedOptions.filter((opt) => opt.label.toLowerCase().includes(trimmed))
+  }, [sortedOptions, search])
+
+  // 드롭다운 열릴 때 검색어 초기화 및 포커스
+  const handleOpen = () => {
+    if (disabled) return
+    setSearch("")
+    setHighlightIndex(-1)
+    setIsOpen(true)
+  }
+
+  // 드롭다운 닫기
+  const handleClose = () => {
+    setIsOpen(false)
+    setSearch("")
+    setHighlightIndex(-1)
+  }
+
+  // 열릴 때 검색창에 포커스
+  useEffect(() => {
+    if (isOpen) {
+      // microtask 후 포커스
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 50)
+    }
+  }, [isOpen])
+
+  // 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        handleClose()
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+    }
+  }, [isOpen])
+
+  // 하이라이트된 요소로 자동 스크롤
+  useEffect(() => {
+    if (isOpen && highlightIndex >= 0 && listRef.current) {
+      const activeEl = listRef.current.children[highlightIndex] as HTMLElement
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "nearest" })
+      }
+    }
+  }, [highlightIndex, isOpen])
+
+  // 키보드 내비게이션 (방향키, Enter, Esc)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === "Enter" || e.key === "ArrowDown" || e.key === " ") {
+        e.preventDefault()
+        handleOpen()
+      }
+      return
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault()
+      handleClose()
+      return
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setHighlightIndex((prev) => {
+        if (filteredOptions.length === 0) return -1
+        return prev < filteredOptions.length - 1 ? prev + 1 : 0
+      })
+      return
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setHighlightIndex((prev) => {
+        if (filteredOptions.length === 0) return -1
+        return prev > 0 ? prev - 1 : filteredOptions.length - 1
+      })
+      return
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault()
+      if (highlightIndex >= 0 && highlightIndex < filteredOptions.length) {
+        const selected = filteredOptions[highlightIndex]
+        onChange(selected.value)
+        handleClose()
+      }
+    }
+  }
+
+  // 항목 선택 핸들러
+  const handleItemSelect = (itemValue: string) => {
+    onChange(itemValue)
+    handleClose()
+  }
+
+  const selectedText = displayValue || value
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label
+        htmlFor={id}
+        className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1"
+      >
+        {label}
+      </label>
+
+      {/* 선택란 트리거 버튼 */}
+      <button
+        id={id}
+        type="button"
+        disabled={disabled}
+        onClick={() => (isOpen ? handleClose() : handleOpen())}
+        onKeyDown={handleKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        className={`
+          w-full appearance-none bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700
+          rounded-xl px-3 py-2 text-xs font-medium text-left flex items-center justify-between
+          focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all cursor-pointer
+          ${disabled ? "opacity-50 cursor-not-allowed bg-zinc-100 dark:bg-zinc-900" : "hover:border-zinc-300 dark:hover:border-zinc-600"}
+          ${isOpen ? "ring-2 ring-sky-500 border-sky-500" : ""}
+        `}
+      >
+        <span
+          className={`truncate ${
+            selectedText
+              ? "text-zinc-900 dark:text-zinc-100 font-semibold"
+              : "text-zinc-400 dark:text-zinc-500"
+          }`}
+        >
+          {selectedText || placeholder}
+        </span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-zinc-400 shrink-0 ml-1 transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-sky-500" : ""
+          }`}
+        />
+      </button>
+
+      {/* 검색 및 목록 드롭다운 팝오버 */}
+      {isOpen && (
+        <div
+          className="absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
+          onKeyDown={handleKeyDown}
+        >
+          {/* 검색창 헤더 */}
+          <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50 relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-4 pointer-events-none" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setHighlightIndex(0)
+              }}
+              placeholder={searchPlaceholder}
+              className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-7 pr-7 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("")
+                  inputRef.current?.focus()
+                }}
+                className="absolute right-3.5 p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                aria-label="검색어 지우기"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* 옵션 목록 (스크롤 가능) */}
+          <ul
+            ref={listRef}
+            role="listbox"
+            className="max-h-56 overflow-y-auto p-1 divide-y divide-zinc-50 dark:divide-zinc-800/40"
+          >
+            {filteredOptions.length === 0 ? (
+              <li className="p-4 text-xs text-center text-zinc-400 dark:text-zinc-500 select-none">
+                검색 결과가 없습니다
+              </li>
+            ) : (
+              filteredOptions.map((opt, index) => {
+                const isSelected = opt.value === value
+                const isHighlighted = index === highlightIndex
+
+                return (
+                  <li key={opt.value} role="option" aria-selected={isSelected}>
+                    <button
+                      type="button"
+                      onClick={() => handleItemSelect(opt.value)}
+                      onMouseEnter={() => setHighlightIndex(index)}
+                      className={`
+                        w-full text-left px-2.5 py-2 text-xs rounded-lg flex items-center justify-between transition-colors
+                        ${
+                          isSelected
+                            ? "bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-bold"
+                            : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        }
+                        ${
+                          isHighlighted && !isSelected
+                            ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                            : ""
+                        }
+                      `}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+                    </button>
+                  </li>
+                )
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function RegionSelector({
   selectedRegionId,
   selectedRegionLabel,
@@ -51,7 +333,7 @@ export function RegionSelector({
   const [selectedStep2, setSelectedStep2] = useState<string>("")
   const [selectedStep3, setSelectedStep3] = useState<string>("")
 
-  // 검색 상태
+  // 검색 상태 (지역명 통합 검색 탭)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -70,7 +352,7 @@ export function RegionSelector({
       .catch(() => {})
   }, [])
 
-  // 1단계 변경 시 2단계 목록 로드 & 하위 초기화 (요구사항 4)
+  // 1단계 변경 시 2단계 목록 로드 & 하위 초기화 (요구사항 3)
   useEffect(() => {
     if (!selectedStep1) {
       setStep2List([])
@@ -85,7 +367,7 @@ export function RegionSelector({
       .then((data) => {
         if (Array.isArray(data.list)) {
           setStep2List(data.list)
-          // 세종시처럼 2단계가 단일('세종시')이거나 없을 때 처리 (요구사항 2)
+          // 세종시처럼 2단계가 단일('세종시')이거나 없을 때 처리
           if (data.list.length === 1 && data.list[0] === "세종시") {
             setSelectedStep2(data.list[0])
           } else {
@@ -100,7 +382,7 @@ export function RegionSelector({
     setSelectedStep3("")
   }, [selectedStep1])
 
-  // 2단계 변경 시 3단계 목록 로드 & 3단계 초기화 (요구사항 4)
+  // 2단계 변경 시 3단계 목록 로드 & 3단계 초기화 (요구사항 3)
   useEffect(() => {
     if (!selectedStep1) return
 
@@ -117,7 +399,7 @@ export function RegionSelector({
     setSelectedStep3("")
   }, [selectedStep1, selectedStep2])
 
-  // 검색어 입력 시 디바운스 검색 (요구사항 3)
+  // 검색어 입력 시 디바운스 검색 (지역명 통합 검색 탭)
   useEffect(() => {
     if (searchDebounceTimer.current) {
       clearTimeout(searchDebounceTimer.current)
@@ -165,9 +447,8 @@ export function RegionSelector({
     }
   }
 
-  // 2단계 시군구 선택 시 핸들러 (하위 목록만 불러오고 날씨 API 호출 안 함, 이전 결과 초기화)
-  const handleSelectStep2 = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value
+  // 2단계 시군구 선택 시 핸들러 (하위 목록만 불러오고 날씨 API 호출 안 함, 읍면동 및 검색어 초기화)
+  const handleSelectStep2 = (val: string) => {
     setSelectedStep2(val)
     setSelectedStep3("")
     setStep3List([])
@@ -176,9 +457,8 @@ export function RegionSelector({
     }
   }
 
-  // 3단계 읍면동 선택 시 핸들러 (시·도, 시·군·구, 읍·면·동 모두 선택 완료 시에만 검색 실행)
-  const handleSelectStep3 = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value
+  // 3단계 읍면동 선택 시 핸들러 (시·도, 시·군·구, 읍·면·동 모두 선택 완료 시에만 선택값 저장)
+  const handleSelectStep3 = (val: string) => {
     setSelectedStep3(val)
     if (val) {
       const found = step3List.find((item) => item.value === val)
@@ -204,16 +484,31 @@ export function RegionSelector({
     }
   }
 
-  // 검색 결과 선택 시 핸들러 (읍·면·동까지 모두 갖춘 항목만 검색 결과로 나옴)
+  // 검색 결과 선택 시 핸들러 (통합 검색 탭)
   const handleSelectSearchResult = (item: SearchResultItem) => {
     onSelectRegion(item.value, item.label)
     setSearchOpen(false)
     setSearchQuery("")
   }
 
+  // 2단계 시군구 옵션 목록 ({ label, value })
+  const step2Options = useMemo(() => {
+    return step2List.map((item) => ({ label: item, value: item }))
+  }, [step2List])
+
+  // 3단계 읍면동 옵션 목록 ({ label, value })
+  const step3Options = useMemo(() => {
+    return step3List.map((item) => ({ label: item.name, value: item.value }))
+  }, [step3List])
+
+  // 현재 선택된 3단계 표시 텍스트
+  const currentStep3Display = useMemo(() => {
+    return step3List.find((item) => item.value === selectedStep3)?.name || ""
+  }, [step3List, selectedStep3])
+
   return (
     <section className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs space-y-4">
-      {/* 선택된 지역 확인 배지 (요구사항: 선택한 지역은 입력 화면에서 확인할 수 있게 표시) */}
+      {/* 선택된 지역 확인 배지 (선택한 지역은 입력 화면에서 확인할 수 있게 표시) */}
       {selectedRegionLabel && (
         <div className="flex items-center justify-between p-2.5 px-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl text-xs">
           <div className="flex items-center gap-2">
@@ -307,7 +602,7 @@ export function RegionSelector({
       {/* 탭 1: 단계별 선택 (시·도 → 시·군·구 → 읍·면·동) */}
       {tab === "step" && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-          {/* 1단계: 시·도 */}
+          {/* 1단계: 시·도 (17개 광역시도) */}
           <div className="relative">
             <label htmlFor="step1-select" className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
               시·도
@@ -329,53 +624,44 @@ export function RegionSelector({
             <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-[29px] pointer-events-none" />
           </div>
 
-          {/* 2단계: 시·군·구 */}
-          <div className="relative">
-            <label htmlFor="step2-select" className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
-              시·군·구
-            </label>
-            <select
-              id="step2-select"
-              value={selectedStep2}
-              onChange={handleSelectStep2}
-              disabled={!selectedStep1 || step2List.length === 0 || isFetching}
-              className="w-full appearance-none bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-500 pr-8 cursor-pointer disabled:opacity-50"
-            >
-              <option value="">
-                {selectedStep1 ? (step2List.length > 0 ? "시·군·구 선택" : "하위 구분 없음") : "시·도 먼저 선택"}
-              </option>
-              {step2List.map((s2) => (
-                <option key={s2} value={s2}>
-                  {s2}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-[29px] pointer-events-none" />
-          </div>
+          {/* 2단계: 시·군·구 (가나다순 정렬 & 검색 기능) */}
+          <SearchableSelect
+            id="step2-select"
+            label="시·군·구"
+            placeholder={
+              selectedStep1
+                ? step2List.length > 0
+                  ? "시·군·구 선택"
+                  : "하위 구분 없음"
+                : "시·도 먼저 선택"
+            }
+            searchPlaceholder="시군구 검색"
+            value={selectedStep2}
+            options={step2Options}
+            onChange={handleSelectStep2}
+            disabled={!selectedStep1 || step2List.length === 0 || isFetching}
+          />
 
-          {/* 3단계: 읍·면·동 */}
-          <div className="relative">
-            <label htmlFor="step3-select" className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
-              읍·면·동
-            </label>
-            <select
-              id="step3-select"
-              value={selectedStep3}
-              onChange={handleSelectStep3}
-              disabled={(!selectedStep2 && step2List.length > 0) || step3List.length === 0 || isFetching}
-              className="w-full appearance-none bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-500 pr-8 cursor-pointer disabled:opacity-50"
-            >
-              <option value="">
-                {step3List.length > 0 ? "읍·면·동 선택" : "시·군·구 먼저 선택"}
-              </option>
-              {step3List.map((s3) => (
-                <option key={s3.value} value={s3.value}>
-                  {s3.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-[29px] pointer-events-none" />
-          </div>
+          {/* 3단계: 읍·면·동 (가나다순 정렬 & 검색 기능) */}
+          <SearchableSelect
+            id="step3-select"
+            label="읍·면·동"
+            placeholder={
+              step3List.length > 0
+                ? "읍·면·동 선택"
+                : "시·군·구 먼저 선택"
+            }
+            searchPlaceholder="읍면동 검색"
+            value={selectedStep3}
+            displayValue={currentStep3Display}
+            options={step3Options}
+            onChange={handleSelectStep3}
+            disabled={
+              (!selectedStep2 && step2List.length > 0) ||
+              step3List.length === 0 ||
+              isFetching
+            }
+          />
         </div>
       )}
 
@@ -385,12 +671,12 @@ export function RegionSelector({
           {!selectedStep1
             ? "💡 시·도 → 시·군·구 → 읍·면·동을 차례로 모두 선택해 주세요."
             : !selectedStep2 && step2List.length > 0
-              ? "💡 시·군·구를 선택해 주세요."
-              : "💡 마지막으로 읍·면·동을 선택한 뒤 아래 ‘추천받기’ 버튼을 눌러주세요."}
+              ? "💡 시·군·구를 검색하거나 선택해 주세요."
+              : "💡 마지막으로 읍·면·동을 검색하거나 선택한 뒤 아래 ‘추천받기’ 버튼을 눌러주세요."}
         </p>
       )}
 
-      {/* 탭 2: 지역명 통합 검색 (요구사항 3) */}
+      {/* 탭 2: 지역명 통합 검색 */}
       {tab === "search" && (
         <div className="relative pt-1">
           <div className="relative">
